@@ -53,6 +53,7 @@ export default function App() {
       <div className="sidebar">
         <div className="sidebar-logo-chip">
           <Logo height={28} />
+          <span className="sidebar-clinic-name">Yaseen Medical &amp; Diagnostic Centre</span>
         </div>
         <div className="sidebar-app-name">ClinicPilot</div>
 

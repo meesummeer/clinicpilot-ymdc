@@ -31,7 +31,10 @@ export function isDateWithinDoctorSchedule(dateStr, doctor) {
 
 export function isTimeWithinDoctorSchedule(timeStr, doctor) {
   if (!doctor || !timeStr) return true;
-  return timeStr >= doctor.start_time && timeStr <= doctor.end_time;
+  const t = timeStr.slice(0, 5);
+  const start = (doctor.start_time || '').slice(0, 5);
+  const end = (doctor.end_time || '').slice(0, 5);
+  return t >= start && t <= end;
 }
 
 export function doctorScheduleLabel(doctor) {

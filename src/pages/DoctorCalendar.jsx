@@ -98,35 +98,30 @@ export default function DoctorCalendar() {
         </div>
       </div>
 
-      <div className="card">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, textAlign: 'center', fontSize: 12, fontWeight: 700, color: '#777', marginBottom: 6 }}>
+      <div className="card calendar-card">
+        <div className="calendar-weekday-row">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => <div key={d}>{d}</div>)}
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6 }}>
+        <div className="calendar-grid">
           {cells.map((day, i) => {
             if (day === null) return <div key={i} />;
             const dayAppts = byDay[day] || [];
             const isSelected = selectedDay === day;
+            const isToday = day === new Date().getDate() && cursor.month === new Date().getMonth() && cursor.year === new Date().getFullYear();
+            const classes = ['calendar-cell'];
+            if (dayAppts.length) classes.push('has-appts');
+            if (isSelected) classes.push('selected');
+            if (isToday) classes.push('today');
             return (
               <div
                 key={i}
                 onClick={() => setSelectedDay(day)}
-                style={{
-                  border: isSelected ? `2px solid ${selectedDoctor?.color_hex || '#1A0A6E'}` : '1px solid var(--border-grey)',
-                  borderRadius: 6,
-                  minHeight: 62,
-                  padding: 6,
-                  cursor: 'pointer',
-                  background: dayAppts.length ? '#FAFAFA' : 'white',
-                }}
+                className={classes.join(' ')}
+                style={isSelected ? { borderColor: selectedDoctor?.color_hex || '#1A0A6E' } : {}}
               >
-                <div style={{ fontSize: 12, fontWeight: 600 }}>{day}</div>
+                <span className="calendar-daynum">{day}</span>
                 {dayAppts.length > 0 && (
-                  <div style={{
-                    marginTop: 4, fontSize: 11, fontWeight: 700, color: 'white',
-                    background: selectedDoctor?.color_hex || '#1A0A6E',
-                    borderRadius: 10, padding: '1px 7px', display: 'inline-block',
-                  }}>
+                  <div className="calendar-count" style={{ background: selectedDoctor?.color_hex || '#1A0A6E' }}>
                     {dayAppts.length}
                   </div>
                 )}
