@@ -250,3 +250,194 @@ table.data-table tr:hover td { background: #FAFAFA; }
 }
 .error-text { color: var(--red); font-size: 13px; margin-bottom: 10px; }
 .empty-state { text-align: center; padding: 40px; color: var(--grey-text); }
+
+/* ── Footer ──────────────────────────────────────────────────── */
+.app-footer {
+  text-align: center;
+  padding: 14px;
+  font-size: 12px;
+  color: #999;
+  border-top: 1px solid var(--border-grey);
+  background: white;
+}
+
+/* ── Doctor monthly calendar ─────────────────────────────────── */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.calendar-weekday {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--navy);
+  padding: 6px 0;
+}
+.calendar-cell {
+  min-height: 90px;
+  border: 1px solid var(--border-grey);
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  overflow: hidden;
+}
+.calendar-cell:hover { background: #FAFAFA; }
+.calendar-cell-empty { border: none; cursor: default; }
+.calendar-cell-empty:hover { background: transparent; }
+.calendar-cell-today { border-color: var(--gold); border-width: 2px; }
+.calendar-cell-selected { background: #EFEEFB; border-color: var(--navy); }
+.calendar-day-number { font-size: 12px; font-weight: 700; color: #555; margin-bottom: 4px; }
+.calendar-appt-chip {
+  font-size: 10px;
+  background: #F4F5F8;
+  border-left: 3px solid #ccc;
+  padding: 2px 4px;
+  margin-bottom: 2px;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.calendar-more { font-size: 10px; color: #888; }
+
+/* ── Invoice / print ──────────────────────────────────────────── */
+.invoice-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 30px 16px;
+  z-index: 100;
+}
+.invoice-toolbar {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+  z-index: 101;
+}
+.invoice-sheet {
+  background: white;
+  width: 100%;
+  max-width: 620px;
+  padding: 30px;
+  border-radius: 4px;
+}
+.invoice-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  border-bottom: 2px solid var(--navy);
+  padding-bottom: 12px;
+  margin-bottom: 14px;
+}
+.invoice-logo { height: 50px; }
+.invoice-clinic-name { color: var(--red); font-weight: 700; font-size: 18px; }
+.invoice-address, .invoice-contact { color: var(--navy); font-size: 11px; }
+.invoice-title { text-align: center; font-weight: 700; font-size: 16px; margin-bottom: 14px; }
+.invoice-meta-row, .invoice-patient-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 10px;
+}
+.invoice-meta-box, .invoice-patient-box {
+  border: 1px solid #999;
+  padding: 6px 10px;
+  font-size: 12px;
+  flex: 1;
+}
+.invoice-meta-box span, .invoice-patient-box span { display: block; color: #777; font-size: 10px; }
+.invoice-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 14px;
+  font-size: 13px;
+}
+.invoice-table th, .invoice-table td {
+  border: 1px solid #999;
+  padding: 8px 10px;
+  text-align: left;
+}
+.invoice-table th { background: #F0F0F0; }
+
+@media print {
+  body * { visibility: hidden; }
+  .invoice-overlay, .invoice-overlay * { visibility: visible; }
+  .invoice-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: white;
+    padding: 0;
+  }
+  .no-print, .invoice-toolbar { display: none !important; }
+}
+
+/* ── Invoice / Print ─────────────────────────────────────────── */
+.invoice-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: auto;
+  padding: 24px;
+}
+.invoice-toolbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.invoice-sheet {
+  background: white;
+  width: 480px;
+  max-width: 100%;
+  padding: 28px;
+  border-radius: 8px;
+}
+.invoice-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 2px solid var(--navy);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+.invoice-logo { height: 44px; }
+.invoice-header h2 { margin: 0; color: var(--red); font-size: 20px; }
+.invoice-clinic-block { font-size: 12px; color: #333; margin-bottom: 14px; line-height: 1.5; }
+.invoice-meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-grey);
+  margin-bottom: 6px;
+}
+.invoice-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 13px; }
+.invoice-table th, .invoice-table td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+.invoice-table thead th { background: var(--navy); color: white; }
+.invoice-table tfoot td { font-weight: 700; background: #FAFAFA; }
+
+@media print {
+  body * { visibility: hidden; }
+  .invoice-sheet, .invoice-sheet * { visibility: visible; }
+  .invoice-sheet { position: absolute; top: 0; left: 0; width: 100%; box-shadow: none; }
+  .no-print { display: none !important; }
+}
+
+/* ── App footer ───────────────────────────────────────────────── */
+.app-footer {
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  padding: 16px;
+}

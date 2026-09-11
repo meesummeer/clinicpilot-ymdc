@@ -1,18 +1,41 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { isDateWithinDoctorSchedule, isTimeWithinDoctorSchedule, doctorScheduleLabel } from '../lib/formatters';
 
-export default function AppointmentForm({ doctors, onSaved, onCancel, profileId }) {
-  const [form, setForm] = useState({
-    patient_name: '',
-    patient_phone: '',
-    doctor_id: doctors[0]?.id || '',
-    appointment_date: new Date().toISOString().slice(0, 10),
-    appointment_time: '10:00',
-    status: 'scheduled',
-    notes: '',
-  });
+export default function AppointmentForm({ doctors, onSaved, onCancel, profileId, editing }) {
+  const [form, setForm] = useState(
+    editing
+      ? {
+          patient_name: editing.patient_name,
+          patient_phone: editing.patient_phone || '',
+          doctor_id: editing.doctor_id,
+          appointment_date: editing.appointment_date,
+          appointment_time: editing.appointment_time?.slice(0, 5),
+          status: editing.status,
+          notes: editing.notes || '',
+        }
+      : {
+          patient_name: '',
+          patient_phone: '',
+          doctor_id: doctors[0]?.id || '',
+          appointment_date: new Date().toISOString().slice(0, 10),
+          appointment_time: '10:00',
+          status: 'scheduled',
+          notes: '',
+        }
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const selectedDoctor = doctors.find((d) => d.id === form.doctor_id);
+
+  const scheduleWarning = useMemo(() => {
+    if (!selectedDoctor || !form.appointment_date || !form.appointment_time) return null;
+    const dateOk = isDateWithinDoctorSchedule(form.appointment_date, selectedDoctor);
+    const timeOk = isTimeWithinDoctorSchedule(form.appointment_time, selectedDoctor);
+    if (dateOk && timeOk) return null;
+    return `${selectedDoctor.name} works: ${doctorScheduleLabel(selectedDoctor)}. This slot falls outside that.`;
+  }, [selectedDoctor, form.appointment_date, form.appointment_time]);
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -20,12 +43,26 @@ export default function AppointmentForm({ doctors, onSaved, onCancel, profileId 
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (scheduleWarning && !window.confirm(`${scheduleWarning}\n\nBook anyway?`)) return;
     setSaving(true);
     setError('');
-    const { error } = await supabase.from('appointments').insert({
-      ...form,
-      created_by: profileId,
-    });
+
+    const { error } = editing
+      ? await supabase.from('appointments').update(form).eq('id', editing.id)
+      : await supabase.from('appointments').insert({ ...form, created_by: profileId });
+
+    setSaving(false);
+    if (error) {
+      setError(error.message);
+      return;
+    }
+    onSaved();
+  }
+
+  async function handleDelete() {
+    if (!window.confirm(`Delete this appointment for ${editing.patient_name}? This can't be undone.`)) return;
+    setSaving(true);
+    const { error } = await supabase.from('appointments').delete().eq('id', editing.id);
     setSaving(false);
     if (error) {
       setError(error.message);
@@ -36,7 +73,7 @@ export default function AppointmentForm({ doctors, onSaved, onCancel, profileId 
 
   return (
     <form className="card" onSubmit={handleSubmit} style={{ borderTop: '4px solid var(--gold)' }}>
-      <h3 style={{ marginTop: 0 }}>New Appointment</h3>
+      <h3 style={{ marginTop: 0 }}>{editing ? 'Edit Appointment' : 'New Appointment'}</h3>
       {error && <div className="error-text">{error}</div>}
       <div className="filters-row">
         <div className="filter-field">
@@ -63,6 +100,11 @@ export default function AppointmentForm({ doctors, onSaved, onCancel, profileId 
           </select>
         </div>
       </div>
+      {selectedDoctor && (
+        <p style={{ fontSize: 12, color: '#777', marginTop: -8 }}>
+          Works: {doctorScheduleLabel(selectedDoctor)}
+        </p>
+      )}
       <div className="filters-row">
         <div className="filter-field">
           <label>Date</label>
@@ -92,6 +134,11 @@ export default function AppointmentForm({ doctors, onSaved, onCancel, profileId 
           </select>
         </div>
       </div>
+      {scheduleWarning && (
+        <div style={{ background: '#FBE6E6', color: 'var(--red)', padding: '8px 12px', borderRadius: 6, fontSize: 13, marginBottom: 14 }}>
+          ⚠ {scheduleWarning}
+        </div>
+      )}
       <div className="filter-field" style={{ marginBottom: 14 }}>
         <label>Notes</label>
         <input
@@ -101,9 +148,19 @@ export default function AppointmentForm({ doctors, onSaved, onCancel, profileId 
         />
       </div>
       <button type="submit" className="btn-primary" disabled={saving} style={{ marginRight: 8 }}>
-        {saving ? 'Saving…' : 'Save Appointment'}
+        {saving ? 'Saving…' : editing ? 'Save Changes' : 'Save Appointment'}
       </button>
-      <button type="button" className="btn-secondary" onClick={onCancel}>Cancel</button>
+      <button type="button" className="btn-secondary" onClick={onCancel} style={{ marginRight: 8 }}>Cancel</button>
+      {editing && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={saving}
+          style={{ background: 'none', border: '1px solid var(--red)', color: 'var(--red)', padding: '8px 15px', borderRadius: 6, cursor: 'pointer', fontSize: 14, float: 'right' }}
+        >
+          Delete Appointment
+        </button>
+      )}
     </form>
   );
 }

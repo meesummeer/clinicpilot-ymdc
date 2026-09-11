@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import AppointmentForm from '../components/AppointmentForm';
+import { formatDateDMY, formatTime12h } from '../lib/formatters';
 
 const STATUS_LABEL = {
   scheduled: 'Scheduled',
@@ -14,6 +15,7 @@ export default function Appointments({ profile }) {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingAppt, setEditingAppt] = useState(null);
 
   const [filterDoctor, setFilterDoctor] = useState('all');
   const [filterDate, setFilterDate] = useState(new Date().toISOString().slice(0, 10));
@@ -48,6 +50,16 @@ export default function Appointments({ profile }) {
 
   const canEdit = profile?.role === 'admin' || profile?.role === 'csr';
 
+  function openNew() {
+    setEditingAppt(null);
+    setShowForm(true);
+  }
+  function openEdit(appt) {
+    if (!canEdit) return;
+    setEditingAppt(appt);
+    setShowForm(true);
+  }
+
   return (
     <div>
       <div className="card">
@@ -76,13 +88,12 @@ export default function Appointments({ profile }) {
             </select>
           </div>
           {canEdit && (
-            <button className="btn-primary" onClick={() => setShowForm((s) => !s)}>
+            <button className="btn-primary" onClick={() => (showForm ? setShowForm(false) : openNew())}>
               {showForm ? 'Close' : '+ New Appointment'}
             </button>
           )}
         </div>
 
-        {/* Doctor color legend */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 12, color: '#666' }}>
           {doctors.map((d) => (
             <span key={d.id}>
@@ -97,9 +108,11 @@ export default function Appointments({ profile }) {
         <AppointmentForm
           doctors={doctors}
           profileId={profile.id}
+          editing={editingAppt}
           onCancel={() => setShowForm(false)}
           onSaved={() => {
             setShowForm(false);
+            setEditingAppt(null);
             loadAppointments();
           }}
         />
@@ -115,11 +128,17 @@ export default function Appointments({ profile }) {
             <div
               key={a.id}
               className="appointment-card"
-              style={{ borderLeftColor: a.doctors?.color_hex || '#ccc' }}
+              style={{ borderLeftColor: a.doctors?.color_hex || '#ccc', cursor: canEdit ? 'pointer' : 'default' }}
+              onClick={() => openEdit(a)}
+              title={canEdit ? 'Click to edit or delete' : ''}
             >
               <div className="info">
-                <strong>{a.appointment_time?.slice(0, 5)} — {a.patient_name}</strong>
-                <span>{a.doctors?.name} {a.patient_phone ? `· ${a.patient_phone}` : ''} {a.notes ? `· ${a.notes}` : ''}</span>
+                <strong>{formatTime12h(a.appointment_time)} — {a.patient_name}</strong>
+                <span>
+                  {a.doctors?.name} · {formatDateDMY(a.appointment_date)}
+                  {a.patient_phone ? ` · ${a.patient_phone}` : ''}
+                  {a.notes ? ` · ${a.notes}` : ''}
+                </span>
               </div>
               <span className={`status-badge status-${a.status}`}>{STATUS_LABEL[a.status]}</span>
             </div>

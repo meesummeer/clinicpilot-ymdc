@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import BillingForm from '../components/BillingForm';
+import InvoiceView from '../components/InvoiceView';
+import { formatDateDMY } from '../lib/formatters';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
@@ -11,6 +13,7 @@ export default function Billing({ profile }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [invoiceEntry, setInvoiceEntry] = useState(null);
 
   const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = today.slice(0, 8) + '01';
@@ -157,7 +160,7 @@ export default function Billing({ profile }) {
             <tbody>
               {byDate.map(([date, d]) => (
                 <tr key={date}>
-                  <td>{date}</td>
+                  <td>{formatDateDMY(date)}</td>
                   <td>{d.count}</td>
                   <td>{formatPKR(d.total)}</td>
                 </tr>
@@ -176,25 +179,31 @@ export default function Billing({ profile }) {
         ) : (
           <table className="data-table">
             <thead>
-              <tr><th>Date</th><th>Patient</th><th>Doctor</th><th>Method</th><th>Amount</th></tr>
+              <tr><th>Date</th><th>Patient</th><th>Doctor</th><th>Service</th><th>Method</th><th>Amount</th><th></th></tr>
             </thead>
             <tbody>
               {entries.map((e) => (
                 <tr key={e.id}>
-                  <td>{e.billing_date}</td>
+                  <td>{formatDateDMY(e.billing_date)}</td>
                   <td>{e.patient_name}</td>
                   <td>
                     <span className="doctor-dot" style={{ background: e.doctors?.color_hex || '#ccc' }} />
                     {e.doctors?.name}
                   </td>
+                  <td>{e.service || '—'}</td>
                   <td style={{ textTransform: 'capitalize' }}>{e.payment_method?.replace('_', ' ')}</td>
                   <td>{formatPKR(e.amount)}</td>
+                  <td>
+                    <button className="btn-secondary" onClick={() => setInvoiceEntry(e)}>Invoice</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {invoiceEntry && <InvoiceView entry={invoiceEntry} onClose={() => setInvoiceEntry(null)} />}
     </div>
   );
 }

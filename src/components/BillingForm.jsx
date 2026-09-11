@@ -4,7 +4,9 @@ import { supabase } from '../lib/supabaseClient';
 export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
   const [form, setForm] = useState({
     patient_name: '',
+    patient_age: '',
     doctor_id: doctors[0]?.id || '',
+    service: '',
     amount: '',
     payment_method: 'cash',
     billing_date: new Date().toISOString().slice(0, 10),
@@ -23,6 +25,7 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
     setError('');
     const { error } = await supabase.from('billing').insert({
       ...form,
+      patient_age: form.patient_age ? parseInt(form.patient_age, 10) : null,
       amount: parseFloat(form.amount),
       created_by: profileId,
     });
@@ -48,12 +51,31 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
           />
         </div>
         <div className="filter-field">
+          <label>Patient Age</label>
+          <input
+            type="number"
+            min="0"
+            value={form.patient_age}
+            onChange={(e) => update('patient_age', e.target.value)}
+          />
+        </div>
+        <div className="filter-field">
           <label>Doctor</label>
           <select value={form.doctor_id} onChange={(e) => update('doctor_id', e.target.value)} required>
             {doctors.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </select>
+        </div>
+      </div>
+      <div className="filters-row">
+        <div className="filter-field">
+          <label>Service</label>
+          <input
+            placeholder="e.g. Consultation Charges"
+            value={form.service}
+            onChange={(e) => update('service', e.target.value)}
+          />
         </div>
         <div className="filter-field">
           <label>Amount (PKR)</label>
@@ -66,8 +88,6 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
             required
           />
         </div>
-      </div>
-      <div className="filters-row">
         <div className="filter-field">
           <label>Date</label>
           <input
@@ -77,6 +97,8 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
             required
           />
         </div>
+      </div>
+      <div className="filters-row">
         <div className="filter-field">
           <label>Payment Method</label>
           <select value={form.payment_method} onChange={(e) => update('payment_method', e.target.value)}>

@@ -18,7 +18,7 @@ git init
 git add .
 git commit -m "Initial ClinicPilot scaffold"
 git branch -M main
-git remote add origin https://github.com/meesummeer/clinicpilot-ymdc
+git remote add origin <your-repo-url>
 git push -u origin main
 ```
 
