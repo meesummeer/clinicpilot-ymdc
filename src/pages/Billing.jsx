@@ -8,7 +8,7 @@ function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
 
-export default function Billing({ profile }) {
+export default function Billing({ profile, userEmail }) {
   const [doctors, setDoctors] = useState([]);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +50,17 @@ export default function Billing({ profile }) {
   }, [loadEntries]);
 
   const canEdit = profile?.role === 'admin' || profile?.role === 'csr';
+  const canDelete = userEmail === 'meesummir@icloud.com';
+
+  async function handleDeleteEntry(entry) {
+    if (!window.confirm(`Delete this billing entry for ${entry.patient_name} (${entry.invoice_ref || 'no ref'})? This can't be undone.`)) return;
+    const { error } = await supabase.from('billing').delete().eq('id', entry.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    loadEntries();
+  }
 
   const totalAmount = useMemo(() => entries.reduce((s, e) => s + Number(e.amount), 0), [entries]);
 
@@ -179,7 +190,7 @@ export default function Billing({ profile }) {
         ) : (
           <table className="data-table">
             <thead>
-              <tr><th>Date</th><th>Patient</th><th>Doctor</th><th>Service</th><th>Method</th><th>Amount</th><th></th></tr>
+              <tr><th>Date</th><th>Patient</th><th>Doctor</th><th>Service</th><th>Method</th><th>Amount</th><th></th>{canDelete && <th></th>}</tr>
             </thead>
             <tbody>
               {entries.map((e) => (
@@ -196,6 +207,11 @@ export default function Billing({ profile }) {
                   <td>
                     <button className="btn-secondary" onClick={() => setInvoiceEntry(e)}>Invoice</button>
                   </td>
+                  {canDelete && (
+                    <td>
+                      <button className="btn-danger-outline" onClick={() => handleDeleteEntry(e)}>Delete</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

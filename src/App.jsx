@@ -108,7 +108,7 @@ export default function App() {
                 <Route path="/today" element={<Today />} />
                 <Route path="/appointments" element={<Appointments profile={profile} />} />
                 <Route path="/calendar" element={<DoctorCalendar />} />
-                <Route path="/billing" element={<Billing profile={profile} />} />
+                <Route path="/billing" element={<Billing profile={profile} userEmail={session.user.email} />} />
                 {isAdmin && <Route path="/doctors" element={<ManageDoctors />} />}
                 <Route path="*" element={<Navigate to="/today" replace />} />
               </>
