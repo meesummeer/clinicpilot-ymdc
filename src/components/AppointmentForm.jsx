@@ -156,7 +156,8 @@ export default function AppointmentForm({ doctors, onSaved, onCancel, profileId,
           type="button"
           onClick={handleDelete}
           disabled={saving}
-          style={{ background: 'none', border: '1px solid var(--red)', color: 'var(--red)', padding: '8px 15px', borderRadius: 6, cursor: 'pointer', fontSize: 14, float: 'right' }}
+          className="btn-danger-outline"
+          style={{ float: 'right' }}
         >
           Delete Appointment
         </button>

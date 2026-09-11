@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import Logo from '../components/Logo';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -19,7 +20,7 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <form className="login-card" onSubmit={handleLogin}>
-        <img src="/logo.png" alt="Yaseen Medical" style={{ height: 60, display: 'block', margin: '0 auto 10px' }} />
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}><Logo height={50} /></div>
         <h2>ClinicPilot</h2>
         <p style={{ textAlign: 'center', color: '#777', fontSize: 13, marginTop: -8 }}>
           Yaseen Medical &amp; Diagnostic Centre
