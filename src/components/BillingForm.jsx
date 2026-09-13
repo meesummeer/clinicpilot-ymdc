@@ -8,10 +8,12 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
     doctor_id: doctors[0]?.id || '',
     service: '',
     amount: '',
+    billed_amount: '',
     payment_method: 'cash',
     billing_date: new Date().toISOString().slice(0, 10),
     notes: '',
   });
+  const [hasBalance, setHasBalance] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,6 +29,7 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
       ...form,
       patient_age: form.patient_age ? parseInt(form.patient_age, 10) : null,
       amount: parseFloat(form.amount),
+      billed_amount: hasBalance && form.billed_amount ? parseFloat(form.billed_amount) : null,
       created_by: profileId,
     });
     setSaving(false);
@@ -78,7 +81,7 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
           />
         </div>
         <div className="filter-field">
-          <label>Amount (PKR)</label>
+          <label>{hasBalance ? 'Amount Collected (PKR)' : 'Amount (PKR)'}</label>
           <input
             type="number"
             min="0"
@@ -97,6 +100,27 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
             required
           />
         </div>
+      </div>
+      <div className="filters-row">
+        <div className="filter-field">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <input type="checkbox" checked={hasBalance} onChange={(e) => setHasBalance(e.target.checked)} style={{ width: 'auto' }} />
+            Partial payment / balance due
+          </label>
+        </div>
+        {hasBalance && (
+          <div className="filter-field">
+            <label>Total Bill (PKR)</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Full amount owed"
+              value={form.billed_amount}
+              onChange={(e) => update('billed_amount', e.target.value)}
+            />
+          </div>
+        )}
       </div>
       <div className="filters-row">
         <div className="filter-field">

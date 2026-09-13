@@ -51,7 +51,15 @@ export default function InvoiceView({ entry, onClose }) {
             </tr>
           </tbody>
           <tfoot>
-            <tr><td colSpan={3}><strong>Total</strong></td><td><strong>Rs{Number(entry.amount).toFixed(2)}</strong></td></tr>
+            {entry.billed_amount && entry.billed_amount > entry.amount ? (
+              <>
+                <tr><td colSpan={3}>Total Bill</td><td>Rs{Number(entry.billed_amount).toFixed(2)}</td></tr>
+                <tr><td colSpan={3}>Amount Paid</td><td>Rs{Number(entry.amount).toFixed(2)}</td></tr>
+                <tr><td colSpan={3}><strong>Balance Due</strong></td><td><strong>Rs{Number(entry.billed_amount - entry.amount).toFixed(2)}</strong></td></tr>
+              </>
+            ) : (
+              <tr><td colSpan={3}><strong>Total</strong></td><td><strong>Rs{Number(entry.amount).toFixed(2)}</strong></td></tr>
+            )}
           </tfoot>
         </table>
       </div>

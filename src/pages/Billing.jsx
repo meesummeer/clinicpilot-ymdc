@@ -203,7 +203,14 @@ export default function Billing({ profile, userEmail }) {
                   </td>
                   <td>{e.service || '—'}</td>
                   <td style={{ textTransform: 'capitalize' }}>{e.payment_method?.replace('_', ' ')}</td>
-                  <td>{formatPKR(e.amount)}</td>
+                  <td>
+                    {formatPKR(e.amount)}
+                    {e.billed_amount && e.billed_amount > e.amount && (
+                      <div style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>
+                        Balance: {formatPKR(e.billed_amount - e.amount)}
+                      </div>
+                    )}
+                  </td>
                   <td>
                     <button className="btn-secondary" onClick={() => setInvoiceEntry(e)}>Invoice</button>
                   </td>
