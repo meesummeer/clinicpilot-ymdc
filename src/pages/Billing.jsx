@@ -13,6 +13,7 @@ export default function Billing({ profile, userEmail }) {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingEntry, setEditingEntry] = useState(null);
   const [invoiceEntry, setInvoiceEntry] = useState(null);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -50,7 +51,13 @@ export default function Billing({ profile, userEmail }) {
   }, [loadEntries]);
 
   const canEdit = profile?.role === 'admin' || profile?.role === 'csr';
+  const canEditEntry = profile?.role === 'admin';
   const canDelete = userEmail === 'meesummir@icloud.com';
+
+  function handleEditEntry(entry) {
+    setEditingEntry(entry);
+    setShowForm(true);
+  }
 
   async function handleDeleteEntry(entry) {
     if (!window.confirm(`Delete this billing entry for ${entry.patient_name} (${entry.invoice_ref || 'no ref'})? This can't be undone.`)) return;
@@ -107,20 +114,36 @@ export default function Billing({ profile, userEmail }) {
             </select>
           </div>
           {canEdit && (
-            <button className="btn-primary" onClick={() => setShowForm((s) => !s)}>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                if (showForm) {
+                  setShowForm(false);
+                  setEditingEntry(null);
+                } else {
+                  setEditingEntry(null);
+                  setShowForm(true);
+                }
+              }}
+            >
               {showForm ? 'Close' : '+ New Billing Entry'}
             </button>
           )}
         </div>
       </div>
 
-      {showForm && canEdit && (
+      {showForm && canEdit && (!editingEntry || canEditEntry) && (
         <BillingForm
           doctors={doctors}
           profileId={profile.id}
-          onCancel={() => setShowForm(false)}
+          entry={editingEntry}
+          onCancel={() => {
+            setShowForm(false);
+            setEditingEntry(null);
+          }}
           onSaved={() => {
             setShowForm(false);
+            setEditingEntry(null);
             loadEntries();
           }}
         />
@@ -190,7 +213,7 @@ export default function Billing({ profile, userEmail }) {
         ) : (
           <table className="data-table">
             <thead>
-              <tr><th>Date</th><th>Patient</th><th>Doctor</th><th>Service</th><th>Method</th><th>Amount</th><th></th>{canDelete && <th></th>}</tr>
+              <tr><th>Date</th><th>Patient</th><th>Doctor</th><th>Service</th><th>Method</th><th>Amount</th><th></th>{canEditEntry && <th></th>}{canDelete && <th></th>}</tr>
             </thead>
             <tbody>
               {entries.map((e) => (
@@ -214,6 +237,11 @@ export default function Billing({ profile, userEmail }) {
                   <td>
                     <button className="btn-secondary" onClick={() => setInvoiceEntry(e)}>Invoice</button>
                   </td>
+                  {canEditEntry && (
+                    <td>
+                      <button className="btn-secondary" onClick={() => handleEditEntry(e)}>Edit</button>
+                    </td>
+                  )}
                   {canDelete && (
                     <td>
                       <button className="btn-danger-outline" onClick={() => handleDeleteEntry(e)}>Delete</button>

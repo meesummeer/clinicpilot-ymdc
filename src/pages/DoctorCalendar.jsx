@@ -13,7 +13,7 @@ function pad(n) { return String(n).padStart(2, '0'); }
 
 export default function DoctorCalendar() {
   const [doctors, setDoctors] = useState([]);
-  const [doctorId, setDoctorId] = useState('');
+  const [doctorId, setDoctorId] = useState('all');
   const [cursor, setCursor] = useState(() => {
     const d = new Date();
     return { year: d.getFullYear(), month: d.getMonth() }; // month 0-indexed
@@ -24,27 +24,26 @@ export default function DoctorCalendar() {
   useEffect(() => {
     supabase.from('doctors').select('*').eq('active', true).order('name').then(({ data }) => {
       setDoctors(data || []);
-      if (data && data.length && !doctorId) setDoctorId(data[0].id);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (!doctorId) return;
     const monthStart = `${cursor.year}-${pad(cursor.month + 1)}-01`;
     const lastDay = new Date(cursor.year, cursor.month + 1, 0).getDate();
     const monthEnd = `${cursor.year}-${pad(cursor.month + 1)}-${pad(lastDay)}`;
-    supabase
+    let query = supabase
       .from('appointments')
-      .select('*')
-      .eq('doctor_id', doctorId)
+      .select('*, doctors(name, color_hex)')
       .gte('appointment_date', monthStart)
-      .lte('appointment_date', monthEnd)
-      .then(({ data, error }) => {
-        if (error) console.error(error.message);
-        setAppointments(data || []);
-        setSelectedDay(null);
-      });
+      .lte('appointment_date', monthEnd);
+
+    if (doctorId !== 'all') query = query.eq('doctor_id', doctorId);
+
+    query.then(({ data, error }) => {
+      if (error) console.error(error.message);
+      setAppointments(data || []);
+      setSelectedDay(null);
+    });
   }, [doctorId, cursor]);
 
   const byDay = useMemo(() => {
@@ -62,8 +61,13 @@ export default function DoctorCalendar() {
   const daysInMonth = new Date(cursor.year, cursor.month + 1, 0).getDate();
   const monthLabel = firstOfMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
+  const isAllDoctors = doctorId === 'all';
   const selectedDoctor = doctors.find((d) => d.id === doctorId);
   const dayAppointments = selectedDay ? (byDay[selectedDay] || []) : [];
+
+  function apptColor(a) {
+    return a.doctors?.color_hex || selectedDoctor?.color_hex || '#1A0A6E';
+  }
 
   const cells = [];
   for (let i = 0; i < startWeekday; i++) cells.push(null);
@@ -76,6 +80,7 @@ export default function DoctorCalendar() {
           <div className="filter-field">
             <label>Doctor</label>
             <select value={doctorId} onChange={(e) => setDoctorId(e.target.value)}>
+              <option value="all">All Doctors</option>
               {doctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
@@ -121,9 +126,24 @@ export default function DoctorCalendar() {
               >
                 <span className="calendar-daynum">{day}</span>
                 {dayAppts.length > 0 && (
-                  <div className="calendar-count" style={{ background: selectedDoctor?.color_hex || '#1A0A6E' }}>
-                    {dayAppts.length}
-                  </div>
+                  isAllDoctors ? (
+                    <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                      {dayAppts.map((a) => (
+                        <span
+                          key={a.id}
+                          title={a.doctors?.name}
+                          style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            background: apptColor(a), display: 'inline-block',
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="calendar-count" style={{ background: selectedDoctor?.color_hex || '#1A0A6E' }}>
+                      {dayAppts.length}
+                    </div>
+                  )
                 )}
               </div>
             );
@@ -134,7 +154,7 @@ export default function DoctorCalendar() {
       {selectedDay && (
         <div className="card">
           <h3 style={{ marginTop: 0 }}>
-            {selectedDoctor?.name} — {monthLabel.split(' ')[0]} {selectedDay}, {cursor.year}
+            {isAllDoctors ? 'All Doctors' : selectedDoctor?.name} — {monthLabel.split(' ')[0]} {selectedDay}, {cursor.year}
           </h3>
           {dayAppointments.length === 0 ? (
             <div className="empty-state">No appointments this day.</div>
@@ -142,12 +162,19 @@ export default function DoctorCalendar() {
             dayAppointments
               .sort((a, b) => a.appointment_time.localeCompare(b.appointment_time))
               .map((a) => (
-                <div key={a.id} className="appointment-card" style={{ borderLeftColor: selectedDoctor?.color_hex || '#ccc' }}>
+                <div key={a.id} className="appointment-card" style={{ borderLeftColor: apptColor(a) }}>
                   <div className="info">
                     <strong>{formatTime12h(a.appointment_time)} — {a.patient_name}</strong>
                     <span>{a.patient_phone || ''} {a.notes ? `· ${a.notes}` : ''}</span>
                   </div>
-                  <span className={`status-badge status-${a.status}`}>{STATUS_LABEL[a.status]}</span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {isAllDoctors && (
+                      <span className="status-badge" style={{ background: apptColor(a), color: 'white' }}>
+                        {a.doctors?.name}
+                      </span>
+                    )}
+                    <span className={`status-badge status-${a.status}`}>{STATUS_LABEL[a.status]}</span>
+                  </div>
                 </div>
               ))
           )}

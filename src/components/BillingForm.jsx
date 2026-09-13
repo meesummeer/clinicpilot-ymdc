@@ -1,19 +1,20 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
-export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
+export default function BillingForm({ doctors, onSaved, onCancel, profileId, entry }) {
+  const isEditing = !!entry;
   const [form, setForm] = useState({
-    patient_name: '',
-    patient_age: '',
-    doctor_id: doctors[0]?.id || '',
-    service: '',
-    amount: '',
-    billed_amount: '',
-    payment_method: 'cash',
-    billing_date: new Date().toISOString().slice(0, 10),
-    notes: '',
+    patient_name: entry?.patient_name || '',
+    patient_age: entry?.patient_age ?? '',
+    doctor_id: entry?.doctor_id || doctors[0]?.id || '',
+    service: entry?.service || '',
+    amount: entry?.amount ?? '',
+    billed_amount: entry?.billed_amount ?? '',
+    payment_method: entry?.payment_method || 'cash',
+    billing_date: entry?.billing_date || new Date().toISOString().slice(0, 10),
+    notes: entry?.notes || '',
   });
-  const [hasBalance, setHasBalance] = useState(false);
+  const [hasBalance, setHasBalance] = useState(!!entry?.billed_amount);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -25,13 +26,15 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
     e.preventDefault();
     setSaving(true);
     setError('');
-    const { error } = await supabase.from('billing').insert({
+    const payload = {
       ...form,
       patient_age: form.patient_age ? parseInt(form.patient_age, 10) : null,
       amount: parseFloat(form.amount),
       billed_amount: hasBalance && form.billed_amount ? parseFloat(form.billed_amount) : null,
-      created_by: profileId,
-    });
+    };
+    const { error } = isEditing
+      ? await supabase.from('billing').update(payload).eq('id', entry.id)
+      : await supabase.from('billing').insert({ ...payload, created_by: profileId });
     setSaving(false);
     if (error) {
       setError(error.message);
@@ -42,7 +45,7 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
 
   return (
     <form className="card" onSubmit={handleSubmit} style={{ borderTop: '4px solid var(--gold)' }}>
-      <h3 style={{ marginTop: 0 }}>New Billing Entry</h3>
+      <h3 style={{ marginTop: 0 }}>{isEditing ? 'Edit Billing Entry' : 'New Billing Entry'}</h3>
       {error && <div className="error-text">{error}</div>}
       <div className="filters-row">
         <div className="filter-field">
@@ -142,7 +145,7 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId }) {
         />
       </div>
       <button type="submit" className="btn-primary" disabled={saving} style={{ marginRight: 8 }}>
-        {saving ? 'Saving…' : 'Save Billing Entry'}
+        {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Save Billing Entry'}
       </button>
       <button type="button" className="btn-secondary" onClick={onCancel}>Cancel</button>
     </form>
