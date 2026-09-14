@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import BillingForm from '../components/BillingForm';
 import InvoiceView from '../components/InvoiceView';
+import DailyReportView from '../components/DailyReportView';
 import { formatDateDMY } from '../lib/formatters';
 
 function formatPKR(n) {
@@ -15,6 +16,7 @@ export default function Billing({ profile, userEmail }) {
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const [invoiceEntry, setInvoiceEntry] = useState(null);
+  const [reportDate, setReportDate] = useState(null);
 
   const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = today.slice(0, 8) + '01';
@@ -70,6 +72,21 @@ export default function Billing({ profile, userEmail }) {
   }
 
   const totalAmount = useMemo(() => entries.reduce((s, e) => s + Number(e.amount), 0), [entries]);
+
+  const cashTotal = useMemo(
+    () => entries.filter((e) => e.payment_method === 'cash').reduce((s, e) => s + Number(e.amount), 0),
+    [entries]
+  );
+
+  const bankTotal = useMemo(
+    () => entries.filter((e) => e.payment_method === 'card' || e.payment_method === 'bank_transfer').reduce((s, e) => s + Number(e.amount), 0),
+    [entries]
+  );
+
+  const reportEntries = useMemo(
+    () => (reportDate ? entries.filter((e) => e.billing_date === reportDate) : []),
+    [reportDate, entries]
+  );
 
   const byDoctor = useMemo(() => {
     const map = {};
@@ -155,12 +172,12 @@ export default function Billing({ profile, userEmail }) {
           <div className="value">{formatPKR(totalAmount)}</div>
         </div>
         <div className="summary-tile">
-          <div className="label">Transactions</div>
-          <div className="value">{entries.length}</div>
+          <div className="label">Cash</div>
+          <div className="value">{formatPKR(cashTotal)}</div>
         </div>
         <div className="summary-tile">
-          <div className="label">Doctors Billed</div>
-          <div className="value">{byDoctor.length}</div>
+          <div className="label">Bank Account</div>
+          <div className="value">{formatPKR(bankTotal)}</div>
         </div>
       </div>
 
@@ -190,10 +207,13 @@ export default function Billing({ profile, userEmail }) {
           <div className="empty-state">No data for this range.</div>
         ) : (
           <table className="data-table">
-            <thead><tr><th>Date</th><th>Transactions</th><th>Total</th></tr></thead>
+            <thead><tr><th></th><th>Date</th><th>Transactions</th><th>Total</th></tr></thead>
             <tbody>
               {byDate.map(([date, d]) => (
                 <tr key={date}>
+                  <td>
+                    <button className="btn-secondary" onClick={() => setReportDate(date)}>View</button>
+                  </td>
                   <td>{formatDateDMY(date)}</td>
                   <td>{d.count}</td>
                   <td>{formatPKR(d.total)}</td>
@@ -255,6 +275,7 @@ export default function Billing({ profile, userEmail }) {
       </div>
 
       {invoiceEntry && <InvoiceView entry={invoiceEntry} onClose={() => setInvoiceEntry(null)} />}
+      {reportDate && <DailyReportView date={reportDate} entries={reportEntries} onClose={() => setReportDate(null)} />}
     </div>
   );
 }

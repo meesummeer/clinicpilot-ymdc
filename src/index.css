@@ -430,6 +430,7 @@ table.data-table tbody tr:hover td { background: #F9F9FD; }
 .invoice-clinic-name { font-weight: 800; font-size: 15px; color: var(--navy); margin-bottom: 4px; }
 .invoice-clinic-address, .invoice-clinic-phone { font-size: 12px; color: #333; line-height: 1.5; }
 .invoice-title { color: var(--red); font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.6px; white-space: nowrap; }
+.invoice-report-date { font-size: 18px; font-weight: 800; color: var(--navy); margin: 0 0 18px; }
 .invoice-meta-row { display: flex; justify-content: space-between; font-size: 14px; padding: 8px 0; border-bottom: 1px solid var(--border-grey); margin-bottom: 12px; }
 .invoice-table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
 .invoice-table th, .invoice-table td { border: 1px solid #ccc; padding: 10px 12px; text-align: left; }
