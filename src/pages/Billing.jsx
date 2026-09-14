@@ -17,6 +17,7 @@ export default function Billing({ profile, userEmail }) {
   const [editingEntry, setEditingEntry] = useState(null);
   const [invoiceEntry, setInvoiceEntry] = useState(null);
   const [reportDate, setReportDate] = useState(null);
+  const [allEntriesDoctorFilter, setAllEntriesDoctorFilter] = useState('all');
 
   const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = today.slice(0, 8) + '01';
@@ -86,6 +87,11 @@ export default function Billing({ profile, userEmail }) {
   const reportEntries = useMemo(
     () => (reportDate ? entries.filter((e) => e.billing_date === reportDate) : []),
     [reportDate, entries]
+  );
+
+  const allEntriesFiltered = useMemo(
+    () => (allEntriesDoctorFilter === 'all' ? entries : entries.filter((e) => e.doctor_id === allEntriesDoctorFilter)),
+    [entries, allEntriesDoctorFilter]
   );
 
   const byDoctor = useMemo(() => {
@@ -226,9 +232,20 @@ export default function Billing({ profile, userEmail }) {
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>All Entries</h3>
+        <div className="filters-row">
+          <div className="filter-field">
+            <label>Doctor</label>
+            <select value={allEntriesDoctorFilter} onChange={(e) => setAllEntriesDoctorFilter(e.target.value)}>
+              <option value="all">All Doctors</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
         {loading ? (
           <p>Loading…</p>
-        ) : entries.length === 0 ? (
+        ) : allEntriesFiltered.length === 0 ? (
           <div className="empty-state">No billing entries for this filter.</div>
         ) : (
           <table className="data-table">
@@ -236,7 +253,7 @@ export default function Billing({ profile, userEmail }) {
               <tr><th>Date</th><th>Patient</th><th>Doctor</th><th>Service</th><th>Method</th><th>Amount</th><th></th>{canEditEntry && <th></th>}{canDelete && <th></th>}</tr>
             </thead>
             <tbody>
-              {entries.map((e) => (
+              {allEntriesFiltered.map((e) => (
                 <tr key={e.id}>
                   <td>{formatDateDMY(e.billing_date)}</td>
                   <td>{e.patient_name}</td>

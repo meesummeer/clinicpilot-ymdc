@@ -1,12 +1,32 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+
+// Doctor name -> service label used to auto-fill "Consultation - {label}".
+// Doctors not listed here are left out of auto-fill entirely.
+const DOCTOR_SERVICE_LABELS = {
+  'Dr. Aneela Shaikh': 'Gynaecologist/Sonologist',
+  'Dr. Anwer Majeed': 'GP',
+  'Dr. A.J Panhwar': 'GP',
+  'Dr. Hafiza Sundas': 'Physiotherapist',
+  'Dr. Rashid Ali': 'Physiotherapist',
+  'Dr. Maqbool Hussain': 'Eye Surgeon',
+  'Dr. Sheikh Imran': 'Orthopedic Surgeon',
+  'Dr. Tara Chand': 'Sonologist',
+  Farrukh: 'Optometrist',
+};
+
+function autoServiceFor(doctorName) {
+  const label = DOCTOR_SERVICE_LABELS[doctorName];
+  return label ? `Consultation - ${label}` : null;
+}
 
 export default function BillingForm({ doctors, onSaved, onCancel, profileId, entry }) {
   const isEditing = !!entry;
+  const initialDoctorId = entry?.doctor_id || doctors[0]?.id || '';
   const [form, setForm] = useState({
     patient_name: entry?.patient_name || '',
     patient_age: entry?.patient_age ?? '',
-    doctor_id: entry?.doctor_id || doctors[0]?.id || '',
+    doctor_id: initialDoctorId,
     service: entry?.service || '',
     amount: entry?.amount ?? '',
     billed_amount: entry?.billed_amount ?? '',
@@ -18,8 +38,28 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Tracks the last value we auto-filled into Service, so a doctor change
+  // only overwrites it if the user hasn't customized it since.
+  const initialDoctorName = doctors.find((d) => d.id === initialDoctorId)?.name;
+  const initialAutoService = autoServiceFor(initialDoctorName);
+  const lastAutoFillRef = useRef(
+    entry?.service && entry.service === initialAutoService ? initialAutoService : null
+  );
+
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  function handleDoctorChange(doctorId) {
+    const doctorName = doctors.find((d) => d.id === doctorId)?.name;
+    const autoService = autoServiceFor(doctorName);
+    setForm((f) => {
+      if (autoService && (f.service === '' || f.service === lastAutoFillRef.current)) {
+        lastAutoFillRef.current = autoService;
+        return { ...f, doctor_id: doctorId, service: autoService };
+      }
+      return { ...f, doctor_id: doctorId };
+    });
   }
 
   async function handleSubmit(e) {
@@ -67,7 +107,7 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
         </div>
         <div className="filter-field">
           <label>Doctor</label>
-          <select value={form.doctor_id} onChange={(e) => update('doctor_id', e.target.value)} required>
+          <select value={form.doctor_id} onChange={(e) => handleDoctorChange(e.target.value)} required>
             {doctors.map((d) => (
               <option key={d.id} value={d.id}>{d.name}</option>
             ))}
