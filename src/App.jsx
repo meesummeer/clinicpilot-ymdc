@@ -7,7 +7,7 @@ import Today from './pages/Today';
 import DoctorCalendar from './pages/DoctorCalendar';
 import Billing from './pages/Billing';
 import ManageDoctors from './pages/ManageDoctors';
-import CeoSummary from './pages/CeoSummary';
+import Hub from './pages/Hub';
 import Logo from './components/Logo';
 
 const PAGE_TITLES = {
@@ -16,7 +16,7 @@ const PAGE_TITLES = {
   '/calendar': 'Doctor Calendar',
   '/billing': 'Billing',
   '/doctors': 'Manage Doctors',
-  '/': 'Revenue Summary',
+  '/hub': 'Hub',
 };
 
 function PageHeader() {
@@ -59,6 +59,11 @@ export default function App() {
 
         {!isCeo && (
           <nav className="sidebar-nav">
+            {isAdmin && (
+              <NavLink to="/hub" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+                <span className="icon-dot" /> Hub
+              </NavLink>
+            )}
             <NavLink to="/today" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
               <span className="icon-dot" /> Today
             </NavLink>
@@ -80,8 +85,8 @@ export default function App() {
         )}
         {isCeo && (
           <nav className="sidebar-nav">
-            <NavLink to="/" className="sidebar-link active">
-              <span className="icon-dot" /> Revenue Summary
+            <NavLink to="/hub" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+              <span className="icon-dot" /> Hub
             </NavLink>
           </nav>
         )}
@@ -99,8 +104,9 @@ export default function App() {
           <Routes>
             {isCeo ? (
               <>
-                <Route path="/" element={<CeoSummary />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
+                <Route path="/" element={<Navigate to="/hub" replace />} />
+                <Route path="/hub" element={<Hub profile={profile} />} />
+                <Route path="*" element={<Navigate to="/hub" replace />} />
               </>
             ) : (
               <>
@@ -110,6 +116,7 @@ export default function App() {
                 <Route path="/calendar" element={<DoctorCalendar />} />
                 <Route path="/billing" element={<Billing profile={profile} userEmail={session.user.email} />} />
                 {isAdmin && <Route path="/doctors" element={<ManageDoctors />} />}
+                {isAdmin && <Route path="/hub" element={<Hub profile={profile} />} />}
                 <Route path="*" element={<Navigate to="/today" replace />} />
               </>
             )}

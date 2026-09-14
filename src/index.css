@@ -505,3 +505,52 @@ table.data-table tbody tr:hover td { background: #F9F9FD; }
   margin-top: 6px; font-size: 11px; font-weight: 800; color: white;
   border-radius: 12px; padding: 2px 8px; display: inline-block;
 }
+
+/* ── Hub (finance dashboard) ─────────────────────────────────── */
+.hub-hero-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+  margin-bottom: 20px;
+}
+.hub-hero-card {
+  background: white;
+  border-radius: var(--radius);
+  padding: 28px 30px;
+  border: 1px solid var(--border-grey);
+  border-top: 4px solid var(--navy);
+  box-shadow: var(--shadow-sm);
+}
+.hub-hero-card .label { font-size: 13px; color: var(--grey-text); text-transform: uppercase; font-weight: 700; letter-spacing: 0.6px; }
+.hub-hero-card .value { font-size: 40px; font-weight: 800; color: var(--navy); margin-top: 8px; letter-spacing: -1px; }
+.hub-hero-sub { font-size: 12px; color: var(--grey-text-light); margin-top: 6px; }
+.hub-hero-card-gold { border-top-color: var(--gold); }
+.hub-hero-card-gold .value { color: #8A6D0F; }
+
+.hub-doctor-block { border-top-width: 4px; border-top-style: solid; }
+.hub-doctor-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hub-doctor-block-header h4 { margin: 0; display: flex; align-items: center; font-size: 15px; }
+.hub-doctor-gross { font-size: 13px; color: var(--grey-text); }
+.hub-doctor-gross strong { color: var(--navy); }
+
+.hub-costs-heading { display: flex; justify-content: space-between; align-items: center; margin: 16px 0 8px; }
+.hub-costs-heading strong { font-size: 13px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--grey-text); }
+
+.hub-cost-form { background: #F9F9FD; border: 1px solid var(--border-grey); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+
+.hub-calc-summary { display: flex; gap: 28px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-grey); }
+.hub-calc-summary > div .label { display: block; font-size: 11px; color: var(--grey-text); text-transform: uppercase; font-weight: 700; letter-spacing: 0.4px; }
+.hub-calc-summary > div .value { display: block; font-size: 18px; font-weight: 800; color: var(--navy); margin-top: 4px; }
+
+.hub-split-blocks { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; }
+.hub-split-block { flex: 1; min-width: 180px; background: #F6F7FB; border-radius: 8px; padding: 14px 16px; }
+.hub-split-block .label { font-size: 11px; color: var(--grey-text); text-transform: uppercase; font-weight: 700; letter-spacing: 0.4px; }
+.hub-split-block .value { font-size: 20px; font-weight: 800; color: var(--navy); margin-top: 4px; }
+.hub-split-block-gold { background: #FBF3DE; }
+.hub-split-block-gold .value { color: #8A6D0F; }
