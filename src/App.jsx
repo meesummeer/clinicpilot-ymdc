@@ -6,6 +6,7 @@ import Appointments from './pages/Appointments';
 import Today from './pages/Today';
 import DoctorCalendar from './pages/DoctorCalendar';
 import Billing from './pages/Billing';
+import Patients from './pages/Patients';
 import ManageDoctors from './pages/ManageDoctors';
 import Hub from './pages/Hub';
 import Logo from './components/Logo';
@@ -15,6 +16,7 @@ const PAGE_TITLES = {
   '/appointments': 'Appointments',
   '/calendar': 'Doctor Calendar',
   '/billing': 'Billing',
+  '/patients': 'Patients',
   '/doctors': 'Manage Doctors',
   '/hub': 'Hub',
 };
@@ -76,6 +78,9 @@ export default function App() {
             <NavLink to="/billing" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
               <span className="icon-dot" /> Billing
             </NavLink>
+            <NavLink to="/patients" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+              <span className="icon-dot" /> Patients
+            </NavLink>
             {isAdmin && (
               <NavLink to="/doctors" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
                 <span className="icon-dot" /> Manage Doctors
@@ -115,6 +120,7 @@ export default function App() {
                 <Route path="/appointments" element={<Appointments profile={profile} />} />
                 <Route path="/calendar" element={<DoctorCalendar />} />
                 <Route path="/billing" element={<Billing profile={profile} userEmail={session.user.email} />} />
+                <Route path="/patients" element={<Patients />} />
                 {isAdmin && <Route path="/doctors" element={<ManageDoctors />} />}
                 {isAdmin && <Route path="/hub" element={<Hub profile={profile} />} />}
                 <Route path="*" element={<Navigate to="/today" replace />} />

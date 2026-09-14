@@ -38,6 +38,7 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
   const [hasBalance, setHasBalance] = useState(!!entry?.billed_amount);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [phoneMatch, setPhoneMatch] = useState(false);
 
   // Tracks the last value we auto-filled into Service, so a doctor change
   // only overwrites it if the user hasn't customized it since.
@@ -49,6 +50,29 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handlePhoneBlur() {
+    const phone = form.patient_phone.trim();
+    if (!phone) {
+      setPhoneMatch(false);
+      return;
+    }
+    const { data, error: lookupError } = await supabase
+      .from('patients')
+      .select('*')
+      .eq('phone', phone)
+      .maybeSingle();
+    if (lookupError) {
+      console.error(lookupError.message);
+      return;
+    }
+    if (data) {
+      setPhoneMatch(true);
+      setForm((f) => ({ ...f, patient_name: data.name }));
+    } else {
+      setPhoneMatch(false);
+    }
   }
 
   function handleDoctorChange(doctorId) {
@@ -76,11 +100,21 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
     const { error } = isEditing
       ? await supabase.from('billing').update(payload).eq('id', entry.id)
       : await supabase.from('billing').insert({ ...payload, created_by: profileId });
-    setSaving(false);
     if (error) {
+      setSaving(false);
       setError(error.message);
       return;
     }
+
+    const phone = form.patient_phone.trim();
+    if (phone) {
+      const { error: patientError } = await supabase
+        .from('patients')
+        .upsert({ phone, name: form.patient_name }, { onConflict: 'phone' });
+      if (patientError) console.error(patientError.message);
+    }
+
+    setSaving(false);
     onSaved();
   }
 
@@ -101,8 +135,17 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
           <label>Patient Phone</label>
           <input
             value={form.patient_phone}
-            onChange={(e) => update('patient_phone', e.target.value)}
+            onChange={(e) => {
+              update('patient_phone', e.target.value);
+              setPhoneMatch(false);
+            }}
+            onBlur={handlePhoneBlur}
           />
+          {phoneMatch && (
+            <div style={{ fontSize: 11, color: '#1B7A3D', fontWeight: 700, marginTop: 4 }}>
+              ✓ Existing patient
+            </div>
+          )}
         </div>
         <div className="filter-field">
           <label>Patient Age</label>
