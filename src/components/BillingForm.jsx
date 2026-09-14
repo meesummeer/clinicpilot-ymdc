@@ -25,6 +25,7 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
   const initialDoctorId = entry?.doctor_id || doctors[0]?.id || '';
   const [form, setForm] = useState({
     patient_name: entry?.patient_name || '',
+    patient_phone: entry?.patient_phone || '',
     patient_age: entry?.patient_age ?? '',
     doctor_id: initialDoctorId,
     service: entry?.service || '',
@@ -94,6 +95,13 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
             value={form.patient_name}
             onChange={(e) => update('patient_name', e.target.value)}
             required
+          />
+        </div>
+        <div className="filter-field">
+          <label>Patient Phone</label>
+          <input
+            value={form.patient_phone}
+            onChange={(e) => update('patient_phone', e.target.value)}
           />
         </div>
         <div className="filter-field">

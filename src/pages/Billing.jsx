@@ -256,7 +256,12 @@ export default function Billing({ profile, userEmail }) {
               {allEntriesFiltered.map((e) => (
                 <tr key={e.id}>
                   <td>{formatDateDMY(e.billing_date)}</td>
-                  <td>{e.patient_name}</td>
+                  <td>
+                    {e.patient_name}
+                    {e.patient_phone && (
+                      <div style={{ fontSize: 11, color: 'var(--grey-text)' }}>{e.patient_phone}</div>
+                    )}
+                  </td>
                   <td>
                     <span className="doctor-dot" style={{ background: e.doctors?.color_hex || '#ccc' }} />
                     {e.doctors?.name}

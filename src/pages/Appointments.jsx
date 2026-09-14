@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import AppointmentForm from '../components/AppointmentForm';
-import { formatDateDMY, formatTime12h } from '../lib/formatters';
+import { formatDateDMY, formatTimeRange12h } from '../lib/formatters';
 
 const STATUS_LABEL = {
   scheduled: 'Scheduled',
@@ -133,7 +133,7 @@ export default function Appointments({ profile }) {
               title={canEdit ? 'Click to edit or delete' : ''}
             >
               <div className="info">
-                <strong>{formatTime12h(a.appointment_time)} — {a.patient_name}</strong>
+                <strong>{formatTimeRange12h(a.appointment_time, a.end_time)} — {a.patient_name}</strong>
                 <span>
                   {a.doctors?.name} · {formatDateDMY(a.appointment_date)}
                   {a.patient_phone ? ` · ${a.patient_phone}` : ''}

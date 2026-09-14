@@ -1,8 +1,18 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { isDateWithinDoctorSchedule, isTimeWithinDoctorSchedule, doctorScheduleLabel } from '../lib/formatters';
+import {
+  isDateWithinDoctorSchedule,
+  isTimeWithinDoctorSchedule,
+  doctorScheduleLabel,
+  addMinutesToTime,
+} from '../lib/formatters';
 
 export default function AppointmentForm({ doctors, onSaved, onCancel, profileId, editing }) {
+  const initialStartTime = editing ? editing.appointment_time?.slice(0, 5) : '10:00';
+  const initialEndTime = editing?.end_time
+    ? editing.end_time.slice(0, 5)
+    : addMinutesToTime(initialStartTime, 30);
+
   const [form, setForm] = useState(
     editing
       ? {
@@ -10,7 +20,8 @@ export default function AppointmentForm({ doctors, onSaved, onCancel, profileId,
           patient_phone: editing.patient_phone || '',
           doctor_id: editing.doctor_id,
           appointment_date: editing.appointment_date,
-          appointment_time: editing.appointment_time?.slice(0, 5),
+          appointment_time: initialStartTime,
+          end_time: initialEndTime,
           status: editing.status,
           notes: editing.notes || '',
         }
@@ -19,13 +30,19 @@ export default function AppointmentForm({ doctors, onSaved, onCancel, profileId,
           patient_phone: '',
           doctor_id: doctors[0]?.id || '',
           appointment_date: new Date().toISOString().slice(0, 10),
-          appointment_time: '10:00',
+          appointment_time: initialStartTime,
+          end_time: initialEndTime,
           status: 'scheduled',
           notes: '',
         }
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Tracks the end time we last auto-calculated (start + 30min), so changing
+  // the start time only re-syncs end time if the user hasn't overridden it.
+  const isEndTimeAuto = !editing?.end_time || editing.end_time.slice(0, 5) === addMinutesToTime(initialStartTime, 30);
+  const lastAutoEndTimeRef = useRef(isEndTimeAuto ? initialEndTime : null);
 
   const selectedDoctor = doctors.find((d) => d.id === form.doctor_id);
 
@@ -41,15 +58,28 @@ export default function AppointmentForm({ doctors, onSaved, onCancel, profileId,
     setForm((f) => ({ ...f, [field]: value }));
   }
 
+  function handleStartTimeChange(value) {
+    setForm((f) => {
+      const autoEnd = addMinutesToTime(value, 30);
+      if (f.end_time === '' || f.end_time === lastAutoEndTimeRef.current) {
+        lastAutoEndTimeRef.current = autoEnd;
+        return { ...f, appointment_time: value, end_time: autoEnd };
+      }
+      return { ...f, appointment_time: value };
+    });
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     if (scheduleWarning && !window.confirm(`${scheduleWarning}\n\nBook anyway?`)) return;
     setSaving(true);
     setError('');
 
+    const payload = { ...form, end_time: form.end_time || null };
+
     const { error } = editing
-      ? await supabase.from('appointments').update(form).eq('id', editing.id)
-      : await supabase.from('appointments').insert({ ...form, created_by: profileId });
+      ? await supabase.from('appointments').update(payload).eq('id', editing.id)
+      : await supabase.from('appointments').insert({ ...payload, created_by: profileId });
 
     setSaving(false);
     if (error) {
@@ -120,8 +150,16 @@ export default function AppointmentForm({ doctors, onSaved, onCancel, profileId,
           <input
             type="time"
             value={form.appointment_time}
-            onChange={(e) => update('appointment_time', e.target.value)}
+            onChange={(e) => handleStartTimeChange(e.target.value)}
             required
+          />
+        </div>
+        <div className="filter-field">
+          <label>End Time</label>
+          <input
+            type="time"
+            value={form.end_time}
+            onChange={(e) => update('end_time', e.target.value)}
           />
         </div>
         <div className="filter-field">

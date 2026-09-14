@@ -16,6 +16,24 @@ export function formatTime12h(time24) {
   return `${h}:${mStr} ${ampm}`;
 }
 
+// ── Time range formatting: "3:00 PM – 3:30 PM", or just the start time
+// when there's no end time ──────────────────────────────────────
+export function formatTimeRange12h(startTime, endTime) {
+  const start = formatTime12h(startTime);
+  if (!endTime) return start;
+  return `${start} – ${formatTime12h(endTime)}`;
+}
+
+// ── Time arithmetic: add minutes to an "HH:MM" string, wrapping at 24h ──
+export function addMinutesToTime(time24, minutesToAdd) {
+  if (!time24) return '';
+  const [hStr, mStr] = time24.split(':');
+  const total = (parseInt(hStr, 10) * 60 + parseInt(mStr, 10) + minutesToAdd + 1440) % 1440;
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
 export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 // Doctor working_days uses 1=Mon..6=Sat,7=Sun (matches ISO-ish, no zero)
 export function jsDayToDoctorDay(jsDay) {

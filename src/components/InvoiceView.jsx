@@ -38,7 +38,10 @@ export default function InvoiceView({ entry, onClose }) {
 
         <div className="invoice-meta-row">
           <div><strong>Patient's Name:</strong> {entry.patient_name}</div>
-          <div>{entry.patient_age ? `Age ${entry.patient_age}` : ''}</div>
+          <div>
+            {entry.patient_age ? `Age ${entry.patient_age}` : ''}
+            {entry.patient_phone ? `${entry.patient_age ? '  ·  ' : ''}${entry.patient_phone}` : ''}
+          </div>
         </div>
 
         <table className="invoice-table">

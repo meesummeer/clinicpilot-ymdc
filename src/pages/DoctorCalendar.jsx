@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { formatTime12h } from '../lib/formatters';
+import { formatTimeRange12h } from '../lib/formatters';
 
 const STATUS_LABEL = {
   scheduled: 'Scheduled',
@@ -164,7 +164,7 @@ export default function DoctorCalendar() {
               .map((a) => (
                 <div key={a.id} className="appointment-card" style={{ borderLeftColor: apptColor(a) }}>
                   <div className="info">
-                    <strong>{formatTime12h(a.appointment_time)} — {a.patient_name}</strong>
+                    <strong>{formatTimeRange12h(a.appointment_time, a.end_time)} — {a.patient_name}</strong>
                     <span>{a.patient_phone || ''} {a.notes ? `· ${a.notes}` : ''}</span>
                   </div>
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

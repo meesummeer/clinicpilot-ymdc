@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { formatTime12h } from '../lib/formatters';
+import { formatTimeRange12h } from '../lib/formatters';
 
 const STATUS_LABEL = {
   scheduled: 'Scheduled',
@@ -43,7 +43,7 @@ export default function Today() {
           appointments.map((a) => (
             <div key={a.id} className="appointment-card" style={{ borderLeftColor: a.doctors?.color_hex || '#ccc' }}>
               <div className="info">
-                <strong>{formatTime12h(a.appointment_time)} — {a.patient_name}</strong>
+                <strong>{formatTimeRange12h(a.appointment_time, a.end_time)} — {a.patient_name}</strong>
                 <span>{a.doctors?.name} {a.patient_phone ? `· ${a.patient_phone}` : ''} {a.notes ? `· ${a.notes}` : ''}</span>
               </div>
               <span className={`status-badge status-${a.status}`}>{STATUS_LABEL[a.status]}</span>
