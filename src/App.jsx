@@ -9,6 +9,9 @@ import Billing from './pages/Billing';
 import Patients from './pages/Patients';
 import ManageDoctors from './pages/ManageDoctors';
 import Hub from './pages/Hub';
+import DoctorOwnCalendar from './pages/DoctorOwnCalendar';
+import DoctorRevenue from './pages/DoctorRevenue';
+import DoctorPatients from './pages/DoctorPatients';
 import Logo from './components/Logo';
 
 const PAGE_TITLES = {
@@ -19,6 +22,7 @@ const PAGE_TITLES = {
   '/patients': 'Patients',
   '/doctors': 'Manage Doctors',
   '/hub': 'Hub',
+  '/revenue': 'Revenue',
 };
 
 function PageHeader() {
@@ -49,6 +53,7 @@ export default function App() {
 
   const isCeo = profile.role === 'ceo';
   const isAdmin = profile.role === 'admin';
+  const isDoctor = profile.role === 'doctor';
 
   return (
     <div className="app-shell">
@@ -59,7 +64,7 @@ export default function App() {
         </div>
         <div className="sidebar-app-name">ClinicPilot</div>
 
-        {!isCeo && (
+        {!isCeo && !isDoctor && (
           <nav className="sidebar-nav">
             {isAdmin && (
               <NavLink to="/hub" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
@@ -95,6 +100,19 @@ export default function App() {
             </NavLink>
           </nav>
         )}
+        {isDoctor && (
+          <nav className="sidebar-nav">
+            <NavLink to="/calendar" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+              <span className="icon-dot" /> Calendar
+            </NavLink>
+            <NavLink to="/revenue" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+              <span className="icon-dot" /> Revenue
+            </NavLink>
+            <NavLink to="/patients" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+              <span className="icon-dot" /> Patients
+            </NavLink>
+          </nav>
+        )}
 
         <div className="sidebar-footer">
           <div className="sidebar-user">{profile.full_name}</div>
@@ -112,6 +130,14 @@ export default function App() {
                 <Route path="/" element={<Navigate to="/hub" replace />} />
                 <Route path="/hub" element={<Hub profile={profile} />} />
                 <Route path="*" element={<Navigate to="/hub" replace />} />
+              </>
+            ) : isDoctor ? (
+              <>
+                <Route path="/" element={<Navigate to="/calendar" replace />} />
+                <Route path="/calendar" element={<DoctorOwnCalendar profile={profile} />} />
+                <Route path="/revenue" element={<DoctorRevenue profile={profile} />} />
+                <Route path="/patients" element={<DoctorPatients profile={profile} />} />
+                <Route path="*" element={<Navigate to="/calendar" replace />} />
               </>
             ) : (
               <>
