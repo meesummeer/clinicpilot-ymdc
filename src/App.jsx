@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './lib/useAuth';
 import { supabase } from './lib/supabaseClient';
@@ -37,6 +38,7 @@ function PageHeader() {
 
 export default function App() {
   const { session, profile, loading } = useAuth();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   if (loading) {
     return <div style={{ padding: 40, textAlign: 'center' }}>Loading ClinicPilot…</div>;
@@ -55,9 +57,12 @@ export default function App() {
   const isAdmin = profile.role === 'admin';
   const isDoctor = profile.role === 'doctor';
 
+  const linkClass = ({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '');
+  const closeNav = () => setMobileNavOpen(false);
+
   return (
     <div className="app-shell">
-      <div className="sidebar">
+      <div className={'sidebar' + (mobileNavOpen ? ' mobile-open' : '')}>
         <div className="sidebar-logo-chip">
           <Logo height={28} />
           <span className="sidebar-clinic-name">Yaseen Medical &amp; Diagnostic Centre</span>
@@ -67,27 +72,27 @@ export default function App() {
         {!isCeo && !isDoctor && (
           <nav className="sidebar-nav">
             {isAdmin && (
-              <NavLink to="/hub" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+              <NavLink to="/hub" className={linkClass} onClick={closeNav}>
                 <span className="icon-dot" /> Hub
               </NavLink>
             )}
-            <NavLink to="/today" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+            <NavLink to="/today" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Today
             </NavLink>
-            <NavLink to="/appointments" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+            <NavLink to="/appointments" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Appointments
             </NavLink>
-            <NavLink to="/calendar" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+            <NavLink to="/calendar" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Calendar
             </NavLink>
-            <NavLink to="/billing" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+            <NavLink to="/billing" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Billing
             </NavLink>
-            <NavLink to="/patients" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+            <NavLink to="/patients" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Patients
             </NavLink>
             {isAdmin && (
-              <NavLink to="/doctors" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+              <NavLink to="/doctors" className={linkClass} onClick={closeNav}>
                 <span className="icon-dot" /> Manage Doctors
               </NavLink>
             )}
@@ -95,20 +100,20 @@ export default function App() {
         )}
         {isCeo && (
           <nav className="sidebar-nav">
-            <NavLink to="/hub" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+            <NavLink to="/hub" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Hub
             </NavLink>
           </nav>
         )}
         {isDoctor && (
           <nav className="sidebar-nav">
-            <NavLink to="/calendar" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+            <NavLink to="/calendar" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Calendar
             </NavLink>
-            <NavLink to="/revenue" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+            <NavLink to="/revenue" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Revenue
             </NavLink>
-            <NavLink to="/patients" className={({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '')}>
+            <NavLink to="/patients" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Patients
             </NavLink>
           </nav>
@@ -121,7 +126,15 @@ export default function App() {
         </div>
       </div>
 
+      {mobileNavOpen && <div className="sidebar-overlay" onClick={closeNav} />}
+
       <div className="main-area">
+        <div className="mobile-topbar">
+          <Logo height={22} />
+          <button className="hamburger-btn" onClick={() => setMobileNavOpen(true)} aria-label="Open menu">
+            <span /><span /><span />
+          </button>
+        </div>
         <PageHeader />
         <div className="content">
           <Routes>

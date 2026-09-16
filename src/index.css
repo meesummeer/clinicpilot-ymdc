@@ -577,3 +577,95 @@ table.data-table tbody tr:hover td { background: #F9F9FD; }
 .modal-field { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border-grey); font-size: 14px; }
 .modal-field .label { color: var(--grey-text); font-weight: 600; }
 .modal-field .value { color: #1E2130; font-weight: 600; text-align: right; }
+
+/* ── Mobile (max-width: 768px) ────────────────────────────────────
+   Everything above this breakpoint is untouched — the desktop layout
+   keeps behaving exactly as it does today. These elements exist in
+   the DOM at every width, so they're hidden here by default and only
+   switched on inside the media query below. ─────────────────────── */
+.mobile-topbar { display: none; }
+.hamburger-btn { display: none; }
+.sidebar-overlay { display: none; }
+
+@media (max-width: 768px) {
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 52px;
+    padding: 0 16px;
+    background: var(--navy);
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+
+  .hamburger-btn {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 0;
+  }
+  .hamburger-btn span {
+    display: block;
+    width: 16px;
+    height: 2px;
+    background: white;
+    border-radius: 2px;
+  }
+
+  .topheader { top: 52px; padding: 14px 16px; }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(16, 12, 60, 0.5);
+    z-index: 45;
+  }
+
+  .content { padding: 14px 16px; }
+
+  /* Tables live directly inside .card everywhere in this app, so
+     letting the card scroll horizontally (instead of squeezing the
+     table to fit) keeps wide tables usable without touching every
+     page that renders one. */
+  .card { overflow-x: auto; }
+  table.data-table { width: auto; min-width: 100%; }
+  table.data-table th, table.data-table td { white-space: nowrap; }
+
+  .calendar-weekday-row { font-size: 9.5px; gap: 4px; }
+  .calendar-grid { gap: 4px; }
+  .calendar-cell { min-height: 42px; padding: 4px; border-radius: 7px; }
+  .calendar-daynum { font-size: 11px; }
+  .calendar-count { font-size: 9px; padding: 1px 5px; margin-top: 2px; }
+
+  .login-card { width: 90vw; max-width: 380px; padding: 28px 22px; }
+
+  .filters-row { flex-direction: column; align-items: stretch; }
+  .filter-field select,
+  .filter-field input { width: 100%; min-width: 0; }
+
+  .hub-split-blocks { flex-direction: column; }
+  .hub-calc-summary { flex-direction: column; gap: 14px; }
+}
