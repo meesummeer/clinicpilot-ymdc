@@ -1,14 +1,38 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { supabase } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
 
+const PAYMENT_METHOD_LABEL = {
+  cash: 'Cash',
+  card: 'Card',
+  bank_transfer: 'Bank Transfer',
+  gia_insurance: 'GIA (Insurance)',
+  other: 'Other',
+};
+
 export default function InvoiceView({ entry, onClose, autoPrint }) {
+  const [payments, setPayments] = useState(null); // null = not yet loaded
+
   useEffect(() => {
-    if (entry && autoPrint) {
+    if (!entry?.id) return;
+    setPayments(null);
+    supabase
+      .from('billing_payments')
+      .select('*')
+      .eq('billing_id', entry.id)
+      .then(({ data, error }) => {
+        if (error) console.error(error.message);
+        setPayments(data || []);
+      });
+  }, [entry?.id]);
+
+  useEffect(() => {
+    if (entry && autoPrint && payments !== null) {
       window.print();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry, autoPrint]);
+  }, [entry, autoPrint, payments]);
 
   if (!entry) return null;
 
@@ -18,6 +42,8 @@ export default function InvoiceView({ entry, onClose, autoPrint }) {
   function handlePrint() {
     window.print();
   }
+
+  const paymentList = payments || [];
 
   return createPortal(
     <div className="invoice-overlay">
@@ -76,6 +102,19 @@ export default function InvoiceView({ entry, onClose, autoPrint }) {
             )}
           </tfoot>
         </table>
+
+        {paymentList.length > 0 && (
+          <div className="invoice-meta-row" style={{ borderBottom: 'none' }}>
+            <div>
+              <strong>{paymentList.length > 1 ? 'Payment Methods:' : 'Payment Method:'}</strong>{' '}
+              {paymentList.length > 1
+                ? paymentList
+                    .map((p) => `${PAYMENT_METHOD_LABEL[p.payment_method] || p.payment_method} Rs${Number(p.amount).toFixed(2)}`)
+                    .join('  ·  ')
+                : (PAYMENT_METHOD_LABEL[paymentList[0].payment_method] || paymentList[0].payment_method)}
+            </div>
+          </div>
+        )}
       </div>
     </div>,
     printRoot

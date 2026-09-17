@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
 // Doctor name -> service label used to auto-fill "Consultation - {label}".
@@ -20,6 +20,14 @@ function autoServiceFor(doctorName) {
   return label ? `Consultation - ${label}` : null;
 }
 
+function formatPKR(n) {
+  return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
+}
+
+function emptyPayment() {
+  return { payment_method: 'cash', amount: '' };
+}
+
 export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCancel, profileId, entry }) {
   const isEditing = !!entry;
   const initialDoctorId = entry?.doctor_id || doctors[0]?.id || '';
@@ -29,9 +37,7 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
     patient_age: entry?.patient_age ?? '',
     doctor_id: initialDoctorId,
     service: entry?.service || '',
-    amount: entry?.amount ?? '',
     billed_amount: entry?.billed_amount ?? '',
-    payment_method: entry?.payment_method || 'cash',
     billing_date: entry?.billing_date || new Date().toISOString().slice(0, 10),
     notes: entry?.notes || '',
   });
@@ -40,6 +46,31 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
   const [error, setError] = useState('');
   const [phoneMatch, setPhoneMatch] = useState(false);
   const [pendingAction, setPendingAction] = useState('save');
+
+  // Payment rows — defaults to one empty row for a new entry, or the entry's
+  // legacy single amount/method until its real billing_payments rows load.
+  const [payments, setPayments] = useState(() =>
+    entry
+      ? [{ payment_method: entry.payment_method || 'cash', amount: entry.amount != null ? String(entry.amount) : '' }]
+      : [emptyPayment()]
+  );
+
+  useEffect(() => {
+    if (!entry?.id) return;
+    supabase
+      .from('billing_payments')
+      .select('*')
+      .eq('billing_id', entry.id)
+      .then(({ data, error: loadError }) => {
+        if (loadError) {
+          console.error(loadError.message);
+          return;
+        }
+        if (data && data.length > 0) {
+          setPayments(data.map((p) => ({ payment_method: p.payment_method, amount: String(p.amount) })));
+        }
+      });
+  }, [entry?.id]);
 
   // Tracks the last value we auto-filled into Service, so a doctor change
   // only overwrites it if the user hasn't customized it since.
@@ -52,6 +83,20 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
   }
+
+  function updatePayment(index, field, value) {
+    setPayments((rows) => rows.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
+  }
+
+  function addPayment() {
+    setPayments((rows) => [...rows, emptyPayment()]);
+  }
+
+  function removePayment(index) {
+    setPayments((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  const paymentsTotal = payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
 
   async function handlePhoneBlur() {
     const phone = form.patient_phone.trim();
@@ -90,23 +135,48 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setSaving(true);
     setError('');
+
+    const validPayments = payments
+      .map((p) => ({ payment_method: p.payment_method, amount: parseFloat(p.amount) }))
+      .filter((p) => !isNaN(p.amount) && p.amount > 0);
+
+    if (validPayments.length === 0) {
+      setError('Add at least one payment with an amount.');
+      return;
+    }
+
+    setSaving(true);
+    const totalAmount = validPayments.reduce((s, p) => s + p.amount, 0);
+    const overallPaymentMethod = validPayments.length === 1 ? validPayments[0].payment_method : 'other';
+
     const payload = {
       ...form,
       patient_age: form.patient_age ? parseInt(form.patient_age, 10) : null,
-      amount: parseFloat(form.amount),
       billed_amount: hasBalance && form.billed_amount ? parseFloat(form.billed_amount) : null,
+      amount: totalAmount,
+      payment_method: overallPaymentMethod,
     };
+
     const query = isEditing
       ? supabase.from('billing').update(payload).eq('id', entry.id)
       : supabase.from('billing').insert({ ...payload, created_by: profileId });
-    const { data, error } = await query.select('*, doctors(name, color_hex)').single();
-    if (error) {
+    const { data, error: saveError } = await query.select('*, doctors(name, color_hex)').single();
+    if (saveError) {
       setSaving(false);
-      setError(error.message);
+      setError(saveError.message);
       return;
     }
+
+    if (isEditing) {
+      const { error: deleteError } = await supabase.from('billing_payments').delete().eq('billing_id', entry.id);
+      if (deleteError) console.error(deleteError.message);
+    }
+
+    const { error: paymentsError } = await supabase
+      .from('billing_payments')
+      .insert(validPayments.map((p) => ({ billing_id: data.id, payment_method: p.payment_method, amount: p.amount })));
+    if (paymentsError) console.error(paymentsError.message);
 
     const phone = form.patient_phone.trim();
     if (phone) {
@@ -181,17 +251,6 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
           />
         </div>
         <div className="filter-field">
-          <label>{hasBalance ? 'Amount Collected (PKR)' : 'Amount (PKR)'}</label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={form.amount}
-            onChange={(e) => update('amount', e.target.value)}
-            required
-          />
-        </div>
-        <div className="filter-field">
           <label>Date</label>
           <input
             type="date"
@@ -201,6 +260,58 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
           />
         </div>
       </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'var(--grey-text)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+          Payments
+        </label>
+        {payments.map((p, i) => (
+          <div key={i} className="filters-row" style={{ marginBottom: 8 }}>
+            <div className="filter-field">
+              <label>Method</label>
+              <select value={p.payment_method} onChange={(e) => updatePayment(i, 'payment_method', e.target.value)}>
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="gia_insurance">GIA (Insurance)</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="filter-field">
+              <label>Amount (PKR)</label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={p.amount}
+                onChange={(e) => updatePayment(i, 'amount', e.target.value)}
+                required
+              />
+            </div>
+            {payments.length > 1 && (
+              <div className="filter-field" style={{ minWidth: 0 }}>
+                <label>&nbsp;</label>
+                <button
+                  type="button"
+                  className="btn-danger-outline"
+                  onClick={() => removePayment(i)}
+                  style={{ padding: '9px 14px' }}
+                  aria-label="Remove payment"
+                >
+                  ×
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+        <button type="button" className="btn-secondary" onClick={addPayment} style={{ marginBottom: 10 }}>
+          + Add Payment
+        </button>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)' }}>
+          Total: {formatPKR(paymentsTotal)}
+        </div>
+      </div>
+
       <div className="filters-row">
         <div className="filter-field">
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
@@ -221,17 +332,6 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
             />
           </div>
         )}
-      </div>
-      <div className="filters-row">
-        <div className="filter-field">
-          <label>Payment Method</label>
-          <select value={form.payment_method} onChange={(e) => update('payment_method', e.target.value)}>
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="bank_transfer">Bank Transfer</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
       </div>
       <div className="filter-field" style={{ marginBottom: 14 }}>
         <label>Notes</label>

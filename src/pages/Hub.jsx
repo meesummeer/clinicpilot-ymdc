@@ -18,6 +18,7 @@ export default function Hub({ profile }) {
 
   const [doctors, setDoctors] = useState([]);
   const [rows, setRows] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [costs, setCosts] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,8 +41,21 @@ export default function Hub({ profile }) {
     if (rowErr) console.error(rowErr.message);
     if (costErr) console.error(costErr.message);
     setDoctors(docs || []);
-    setRows(analyticsRows || []);
+    const billingRows = analyticsRows || [];
+    setRows(billingRows);
     setCosts(costRows || []);
+
+    if (billingRows.length > 0) {
+      const { data: paymentRows, error: paymentsError } = await supabase
+        .from('billing_payments')
+        .select('*')
+        .in('billing_id', billingRows.map((r) => r.id));
+      if (paymentsError) console.error(paymentsError.message);
+      setPayments(paymentRows || []);
+    } else {
+      setPayments([]);
+    }
+
     setLoading(false);
   }, [dateFrom, dateTo]);
 
@@ -49,11 +63,28 @@ export default function Hub({ profile }) {
     loadData();
   }, [loadData]);
 
-  const totalRevenue = useMemo(() => rows.reduce((s, r) => s + Number(r.amount), 0), [rows]);
+  // GIA Insurance is only actually collected at month-end, so every revenue
+  // total in Hub excludes it — computed per billing row from its own
+  // billing_payments rows (not billing_analytics.amount) so a mixed invoice
+  // (part GIA, part something else) only contributes its non-GIA portion.
+  const nonGiaAmountByBillingId = useMemo(() => {
+    const map = {};
+    payments.forEach((p) => {
+      if (p.payment_method === 'gia_insurance') return;
+      map[p.billing_id] = (map[p.billing_id] || 0) + Number(p.amount);
+    });
+    return map;
+  }, [payments]);
+
+  function revenueFor(row) {
+    return nonGiaAmountByBillingId[row.id] || 0;
+  }
+
+  const totalRevenue = useMemo(() => rows.reduce((s, r) => s + revenueFor(r), 0), [rows, nonGiaAmountByBillingId]);
 
   const serviceCategoryRevenue = useMemo(
-    () => rows.filter((r) => r.is_service_category).reduce((s, r) => s + Number(r.amount), 0),
-    [rows]
+    () => rows.filter((r) => r.is_service_category).reduce((s, r) => s + revenueFor(r), 0),
+    [rows, nonGiaAmountByBillingId]
   );
 
   const doctorFinancials = useMemo(() => {
@@ -61,7 +92,7 @@ export default function Hub({ profile }) {
       .filter((d) => !d.is_service_category)
       .map((d) => {
         const doctorRows = rows.filter((r) => r.doctor_id === d.id);
-        const gross = doctorRows.reduce((s, r) => s + Number(r.amount), 0);
+        const gross = doctorRows.reduce((s, r) => s + revenueFor(r), 0);
         const costsList = costs
           .filter((c) => c.doctor_id === d.id)
           .sort((a, b) => (a.cost_date < b.cost_date ? 1 : -1));
@@ -81,7 +112,7 @@ export default function Hub({ profile }) {
           ymdcShare,
         };
       });
-  }, [doctors, rows, costs]);
+  }, [doctors, rows, costs, nonGiaAmountByBillingId]);
 
   const ymdcRevenue = useMemo(
     () => doctorFinancials.reduce((s, f) => s + f.ymdcShare, 0) + serviceCategoryRevenue,
@@ -89,15 +120,16 @@ export default function Hub({ profile }) {
   );
 
   const paymentBreakdown = useMemo(() => {
-    const cash = rows.filter((r) => r.payment_method === 'cash').reduce((s, r) => s + Number(r.amount), 0);
-    const bank = rows
-      .filter((r) => r.payment_method === 'card' || r.payment_method === 'bank_transfer')
-      .reduce((s, r) => s + Number(r.amount), 0);
-    const other = rows
-      .filter((r) => r.payment_method !== 'cash' && r.payment_method !== 'card' && r.payment_method !== 'bank_transfer')
-      .reduce((s, r) => s + Number(r.amount), 0);
+    const nonGia = payments.filter((p) => p.payment_method !== 'gia_insurance');
+    const cash = nonGia.filter((p) => p.payment_method === 'cash').reduce((s, p) => s + Number(p.amount), 0);
+    const bank = nonGia
+      .filter((p) => p.payment_method === 'card' || p.payment_method === 'bank_transfer')
+      .reduce((s, p) => s + Number(p.amount), 0);
+    const other = nonGia
+      .filter((p) => p.payment_method !== 'cash' && p.payment_method !== 'card' && p.payment_method !== 'bank_transfer')
+      .reduce((s, p) => s + Number(p.amount), 0);
     return { cash, bank, other };
-  }, [rows]);
+  }, [payments]);
 
   const doctorWise = useMemo(() => {
     return doctors
@@ -106,17 +138,17 @@ export default function Hub({ profile }) {
         return {
           doctor: d,
           count: doctorRows.length,
-          total: doctorRows.reduce((s, r) => s + Number(r.amount), 0),
+          total: doctorRows.reduce((s, r) => s + revenueFor(r), 0),
         };
       })
       .sort((a, b) => b.total - a.total);
-  }, [doctors, rows]);
+  }, [doctors, rows, nonGiaAmountByBillingId]);
 
   const procedureChartData = useMemo(() => {
     const map = {};
     rows.forEach((r) => {
       const key = r.service || 'Unspecified';
-      map[key] = (map[key] || 0) + Number(r.amount);
+      map[key] = (map[key] || 0) + revenueFor(r);
     });
     const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
     const top = sorted.slice(0, 10);
@@ -125,7 +157,7 @@ export default function Hub({ profile }) {
     const data = top.map(([name, value]) => ({ name, value }));
     if (otherTotal > 0) data.push({ name: 'Other', value: otherTotal });
     return data;
-  }, [rows]);
+  }, [rows, nonGiaAmountByBillingId]);
 
   function openAddCost(doctorId) {
     setCostDraft({ description: '', amount: '', cost_date: today });

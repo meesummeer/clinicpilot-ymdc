@@ -19,6 +19,7 @@ export default function Billing({ profile, userEmail }) {
   const [invoiceAutoPrint, setInvoiceAutoPrint] = useState(false);
   const [reportDate, setReportDate] = useState(null);
   const [allEntriesDoctorFilter, setAllEntriesDoctorFilter] = useState('all');
+  const [payments, setPayments] = useState([]);
 
   const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = today.slice(0, 8) + '01';
@@ -46,7 +47,20 @@ export default function Billing({ profile, userEmail }) {
 
     const { data, error } = await query;
     if (error) console.error(error.message);
-    setEntries(data || []);
+    const rows = data || [];
+    setEntries(rows);
+
+    if (rows.length > 0) {
+      const { data: paymentRows, error: paymentsError } = await supabase
+        .from('billing_payments')
+        .select('*')
+        .in('billing_id', rows.map((r) => r.id));
+      if (paymentsError) console.error(paymentsError.message);
+      setPayments(paymentRows || []);
+    } else {
+      setPayments([]);
+    }
+
     setLoading(false);
   }, [filterDoctor, dateFrom, dateTo]);
 
@@ -73,16 +87,28 @@ export default function Billing({ profile, userEmail }) {
     loadEntries();
   }
 
-  const totalAmount = useMemo(() => entries.reduce((s, e) => s + Number(e.amount), 0), [entries]);
+  // Revenue totals are computed from billing_payments (not billing.amount)
+  // so GIA Insurance payments — not actually collected until month-end —
+  // can be excluded per payment line, even when an invoice mixes GIA with
+  // other methods.
+  const nonGiaPayments = useMemo(
+    () => payments.filter((p) => p.payment_method !== 'gia_insurance'),
+    [payments]
+  );
+
+  const totalAmount = useMemo(
+    () => nonGiaPayments.reduce((s, p) => s + Number(p.amount), 0),
+    [nonGiaPayments]
+  );
 
   const cashTotal = useMemo(
-    () => entries.filter((e) => e.payment_method === 'cash').reduce((s, e) => s + Number(e.amount), 0),
-    [entries]
+    () => payments.filter((p) => p.payment_method === 'cash').reduce((s, p) => s + Number(p.amount), 0),
+    [payments]
   );
 
   const bankTotal = useMemo(
-    () => entries.filter((e) => e.payment_method === 'card' || e.payment_method === 'bank_transfer').reduce((s, e) => s + Number(e.amount), 0),
-    [entries]
+    () => payments.filter((p) => p.payment_method === 'card' || p.payment_method === 'bank_transfer').reduce((s, p) => s + Number(p.amount), 0),
+    [payments]
   );
 
   const reportEntries = useMemo(
@@ -96,14 +122,19 @@ export default function Billing({ profile, userEmail }) {
   );
 
   const byDate = useMemo(() => {
+    const dateById = {};
     const map = {};
     entries.forEach((e) => {
+      dateById[e.id] = e.billing_date;
       if (!map[e.billing_date]) map[e.billing_date] = { total: 0, count: 0 };
-      map[e.billing_date].total += Number(e.amount);
       map[e.billing_date].count += 1;
     });
+    nonGiaPayments.forEach((p) => {
+      const date = dateById[p.billing_id];
+      if (date) map[date].total += Number(p.amount);
+    });
     return Object.entries(map).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [entries]);
+  }, [entries, nonGiaPayments]);
 
   return (
     <div>
