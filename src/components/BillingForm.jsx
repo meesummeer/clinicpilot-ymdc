@@ -20,7 +20,7 @@ function autoServiceFor(doctorName) {
   return label ? `Consultation - ${label}` : null;
 }
 
-export default function BillingForm({ doctors, onSaved, onCancel, profileId, entry }) {
+export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCancel, profileId, entry }) {
   const isEditing = !!entry;
   const initialDoctorId = entry?.doctor_id || doctors[0]?.id || '';
   const [form, setForm] = useState({
@@ -39,6 +39,7 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [phoneMatch, setPhoneMatch] = useState(false);
+  const [pendingAction, setPendingAction] = useState('save');
 
   // Tracks the last value we auto-filled into Service, so a doctor change
   // only overwrites it if the user hasn't customized it since.
@@ -97,9 +98,10 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
       amount: parseFloat(form.amount),
       billed_amount: hasBalance && form.billed_amount ? parseFloat(form.billed_amount) : null,
     };
-    const { error } = isEditing
-      ? await supabase.from('billing').update(payload).eq('id', entry.id)
-      : await supabase.from('billing').insert({ ...payload, created_by: profileId });
+    const query = isEditing
+      ? supabase.from('billing').update(payload).eq('id', entry.id)
+      : supabase.from('billing').insert({ ...payload, created_by: profileId });
+    const { data, error } = await query.select('*, doctors(name, color_hex)').single();
     if (error) {
       setSaving(false);
       setError(error.message);
@@ -115,7 +117,11 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
     }
 
     setSaving(false);
-    onSaved();
+    if (pendingAction === 'print' && onSavedAndPrint) {
+      onSavedAndPrint(data);
+    } else {
+      onSaved();
+    }
   }
 
   return (
@@ -235,8 +241,23 @@ export default function BillingForm({ doctors, onSaved, onCancel, profileId, ent
           onChange={(e) => update('notes', e.target.value)}
         />
       </div>
-      <button type="submit" className="btn-primary" disabled={saving} style={{ marginRight: 8 }}>
+      <button
+        type="submit"
+        className="btn-primary"
+        disabled={saving}
+        style={{ marginRight: 8 }}
+        onClick={() => setPendingAction('save')}
+      >
         {saving ? 'Saving…' : isEditing ? 'Save Changes' : 'Save Billing Entry'}
+      </button>
+      <button
+        type="submit"
+        className="btn-secondary"
+        disabled={saving}
+        style={{ marginRight: 8 }}
+        onClick={() => setPendingAction('print')}
+      >
+        {saving ? 'Saving…' : 'Save & Print'}
       </button>
       <button type="button" className="btn-secondary" onClick={onCancel}>Cancel</button>
     </form>

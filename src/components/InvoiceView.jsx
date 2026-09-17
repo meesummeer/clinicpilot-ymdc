@@ -1,7 +1,15 @@
+import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { formatDateDMY } from '../lib/formatters';
 
-export default function InvoiceView({ entry, onClose }) {
+export default function InvoiceView({ entry, onClose, autoPrint }) {
+  useEffect(() => {
+    if (entry && autoPrint) {
+      window.print();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry, autoPrint]);
+
   if (!entry) return null;
 
   const printRoot = document.getElementById('invoice-print-root');

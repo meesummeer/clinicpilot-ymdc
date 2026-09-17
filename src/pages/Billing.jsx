@@ -16,6 +16,7 @@ export default function Billing({ profile, userEmail }) {
   const [showForm, setShowForm] = useState(false);
   const [editingEntry, setEditingEntry] = useState(null);
   const [invoiceEntry, setInvoiceEntry] = useState(null);
+  const [invoiceAutoPrint, setInvoiceAutoPrint] = useState(false);
   const [reportDate, setReportDate] = useState(null);
   const [allEntriesDoctorFilter, setAllEntriesDoctorFilter] = useState('all');
 
@@ -94,17 +95,6 @@ export default function Billing({ profile, userEmail }) {
     [entries, allEntriesDoctorFilter]
   );
 
-  const byDoctor = useMemo(() => {
-    const map = {};
-    entries.forEach((e) => {
-      const key = e.doctors?.name || 'Unknown';
-      if (!map[key]) map[key] = { total: 0, count: 0, color: e.doctors?.color_hex || '#ccc' };
-      map[key].total += Number(e.amount);
-      map[key].count += 1;
-    });
-    return Object.entries(map).sort((a, b) => b[1].total - a[1].total);
-  }, [entries]);
-
   const byDate = useMemo(() => {
     const map = {};
     entries.forEach((e) => {
@@ -169,6 +159,13 @@ export default function Billing({ profile, userEmail }) {
             setEditingEntry(null);
             loadEntries();
           }}
+          onSavedAndPrint={(savedEntry) => {
+            setShowForm(false);
+            setEditingEntry(null);
+            loadEntries();
+            setInvoiceAutoPrint(true);
+            setInvoiceEntry(savedEntry);
+          }}
         />
       )}
 
@@ -185,26 +182,6 @@ export default function Billing({ profile, userEmail }) {
           <div className="label">Bank Account</div>
           <div className="value">{formatPKR(bankTotal)}</div>
         </div>
-      </div>
-
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>By Doctor</h3>
-        {byDoctor.length === 0 ? (
-          <div className="empty-state">No data for this range.</div>
-        ) : (
-          <table className="data-table">
-            <thead><tr><th>Doctor</th><th>Transactions</th><th>Total</th></tr></thead>
-            <tbody>
-              {byDoctor.map(([name, d]) => (
-                <tr key={name}>
-                  <td><span className="doctor-dot" style={{ background: d.color }} />{name}</td>
-                  <td>{d.count}</td>
-                  <td>{formatPKR(d.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
       </div>
 
       <div className="card">
@@ -250,11 +227,12 @@ export default function Billing({ profile, userEmail }) {
         ) : (
           <table className="data-table">
             <thead>
-              <tr><th>Date</th><th>Patient</th><th>Doctor</th><th>Service</th><th>Method</th><th>Amount</th><th></th>{canEditEntry && <th></th>}{canDelete && <th></th>}</tr>
+              <tr><th>Ref No.</th><th>Date</th><th>Patient</th><th>Doctor</th><th>Service</th><th>Method</th><th>Amount</th><th></th>{canEditEntry && <th></th>}{canDelete && <th></th>}</tr>
             </thead>
             <tbody>
               {allEntriesFiltered.map((e) => (
                 <tr key={e.id}>
+                  <td>{e.invoice_ref || '—'}</td>
                   <td>{formatDateDMY(e.billing_date)}</td>
                   <td>
                     {e.patient_name}
@@ -277,7 +255,15 @@ export default function Billing({ profile, userEmail }) {
                     )}
                   </td>
                   <td>
-                    <button className="btn-secondary" onClick={() => setInvoiceEntry(e)}>Invoice</button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => {
+                        setInvoiceAutoPrint(false);
+                        setInvoiceEntry(e);
+                      }}
+                    >
+                      Invoice
+                    </button>
                   </td>
                   {canEditEntry && (
                     <td>
@@ -296,7 +282,16 @@ export default function Billing({ profile, userEmail }) {
         )}
       </div>
 
-      {invoiceEntry && <InvoiceView entry={invoiceEntry} onClose={() => setInvoiceEntry(null)} />}
+      {invoiceEntry && (
+        <InvoiceView
+          entry={invoiceEntry}
+          autoPrint={invoiceAutoPrint}
+          onClose={() => {
+            setInvoiceEntry(null);
+            setInvoiceAutoPrint(false);
+          }}
+        />
+      )}
       {reportDate && <DailyReportView date={reportDate} entries={reportEntries} onClose={() => setReportDate(null)} />}
     </div>
   );
