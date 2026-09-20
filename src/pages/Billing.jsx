@@ -36,31 +36,35 @@ export default function Billing({ profile, userEmail }) {
 
   const loadEntries = useCallback(async () => {
     setLoading(true);
-    let query = supabase
+
+    let billingQuery = supabase
       .from('billing')
       .select('*, doctors(name, color_hex)')
       .gte('billing_date', dateFrom)
       .lte('billing_date', dateTo)
       .order('billing_date', { ascending: false });
+    if (filterDoctor !== 'all') billingQuery = billingQuery.eq('doctor_id', filterDoctor);
 
-    if (filterDoctor !== 'all') query = query.eq('doctor_id', filterDoctor);
+    // Filter billing_payments server-side via a join on the date range
+    // (and doctor, when set) instead of fetching billing IDs first and
+    // passing them as a giant .in() list — that list gets long enough with
+    // a wide date range to exceed the URL length limit and 400 the request.
+    let paymentsQuery = supabase
+      .from('billing_payments')
+      .select('*, billing!inner(billing_date, doctor_id)')
+      .gte('billing.billing_date', dateFrom)
+      .lte('billing.billing_date', dateTo);
+    if (filterDoctor !== 'all') paymentsQuery = paymentsQuery.eq('billing.doctor_id', filterDoctor);
 
-    const { data, error } = await query;
+    const [{ data, error }, { data: paymentRows, error: paymentsError }] = await Promise.all([
+      billingQuery,
+      paymentsQuery,
+    ]);
     if (error) console.error(error.message);
-    const rows = data || [];
-    setEntries(rows);
+    if (paymentsError) console.error(paymentsError.message);
 
-    if (rows.length > 0) {
-      const { data: paymentRows, error: paymentsError } = await supabase
-        .from('billing_payments')
-        .select('*')
-        .in('billing_id', rows.map((r) => r.id));
-      if (paymentsError) console.error(paymentsError.message);
-      setPayments(paymentRows || []);
-    } else {
-      setPayments([]);
-    }
-
+    setEntries(data || []);
+    setPayments(paymentRows || []);
     setLoading(false);
   }, [filterDoctor, dateFrom, dateTo]);
 

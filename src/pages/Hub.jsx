@@ -32,30 +32,29 @@ export default function Hub({ profile }) {
       { data: docs, error: docErr },
       { data: analyticsRows, error: rowErr },
       { data: costRows, error: costErr },
+      { data: paymentRows, error: paymentsError },
     ] = await Promise.all([
       supabase.from('doctors').select('*').eq('active', true).order('name'),
       supabase.from('billing_analytics').select('*').gte('billing_date', dateFrom).lte('billing_date', dateTo),
       supabase.from('doctor_costs').select('*').gte('cost_date', dateFrom).lte('cost_date', dateTo),
+      // Filter billing_payments server-side via a join on the date range
+      // instead of fetching billing IDs first and passing them as a giant
+      // .in() list — that list gets long enough with a wide date range to
+      // exceed the URL length limit and 400 the request.
+      supabase
+        .from('billing_payments')
+        .select('*, billing!inner(billing_date)')
+        .gte('billing.billing_date', dateFrom)
+        .lte('billing.billing_date', dateTo),
     ]);
     if (docErr) console.error(docErr.message);
     if (rowErr) console.error(rowErr.message);
     if (costErr) console.error(costErr.message);
+    if (paymentsError) console.error(paymentsError.message);
     setDoctors(docs || []);
-    const billingRows = analyticsRows || [];
-    setRows(billingRows);
+    setRows(analyticsRows || []);
     setCosts(costRows || []);
-
-    if (billingRows.length > 0) {
-      const { data: paymentRows, error: paymentsError } = await supabase
-        .from('billing_payments')
-        .select('*')
-        .in('billing_id', billingRows.map((r) => r.id));
-      if (paymentsError) console.error(paymentsError.message);
-      setPayments(paymentRows || []);
-    } else {
-      setPayments([]);
-    }
-
+    setPayments(paymentRows || []);
     setLoading(false);
   }, [dateFrom, dateTo]);
 
