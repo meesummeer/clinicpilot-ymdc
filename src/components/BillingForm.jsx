@@ -139,10 +139,10 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
 
     const validPayments = payments
       .map((p) => ({ payment_method: p.payment_method, amount: parseFloat(p.amount) }))
-      .filter((p) => !isNaN(p.amount) && p.amount > 0);
+      .filter((p) => !isNaN(p.amount) && p.amount >= 0);
 
     if (validPayments.length === 0) {
-      setError('Add at least one payment with an amount.');
+      setError('Add at least one payment with an amount (0 is allowed, e.g. for a free checkup).');
       return;
     }
 
