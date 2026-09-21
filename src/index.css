@@ -526,6 +526,10 @@ table.data-table tbody tr:hover td { background: #F9F9FD; }
 .hub-hero-sub { font-size: 12px; color: var(--grey-text-light); margin-top: 6px; }
 .hub-hero-card-gold { border-top-color: var(--gold); }
 .hub-hero-card-gold .value { color: #8A6D0F; }
+.hub-hero-card-negative { border-top-color: var(--red); }
+.hub-hero-card-negative .value { color: var(--red); }
+.hub-hero-card-positive { border-top-color: #1B7A3D; }
+.hub-hero-card-positive .value { color: #1B7A3D; }
 
 .hub-doctor-block { border-top-width: 4px; border-top-style: solid; }
 .hub-doctor-block-header {

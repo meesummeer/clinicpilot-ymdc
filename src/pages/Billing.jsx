@@ -19,6 +19,7 @@ export default function Billing({ profile, userEmail }) {
   const [invoiceAutoPrint, setInvoiceAutoPrint] = useState(false);
   const [reportDate, setReportDate] = useState(null);
   const [allEntriesDoctorFilter, setAllEntriesDoctorFilter] = useState('all');
+  const [allEntriesMethodFilter, setAllEntriesMethodFilter] = useState('all');
   const [payments, setPayments] = useState([]);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -92,17 +93,11 @@ export default function Billing({ profile, userEmail }) {
   }
 
   // Revenue totals are computed from billing_payments (not billing.amount)
-  // so GIA Insurance payments — not actually collected until month-end —
-  // can be excluded per payment line, even when an invoice mixes GIA with
-  // other methods.
-  const nonGiaPayments = useMemo(
-    () => payments.filter((p) => p.payment_method !== 'gia_insurance'),
-    [payments]
-  );
-
+  // so a single invoice split across multiple methods (e.g. part cash, part
+  // insurance) contributes the right amount to each bucket below.
   const totalAmount = useMemo(
-    () => nonGiaPayments.reduce((s, p) => s + Number(p.amount), 0),
-    [nonGiaPayments]
+    () => payments.reduce((s, p) => s + Number(p.amount), 0),
+    [payments]
   );
 
   const cashTotal = useMemo(
@@ -115,15 +110,34 @@ export default function Billing({ profile, userEmail }) {
     [payments]
   );
 
+  const insuranceTotal = useMemo(
+    () => payments.filter((p) => p.payment_method === 'insurance').reduce((s, p) => s + Number(p.amount), 0),
+    [payments]
+  );
+
   const reportEntries = useMemo(
     () => (reportDate ? entries.filter((e) => e.billing_date === reportDate) : []),
     [reportDate, entries]
   );
 
-  const allEntriesFiltered = useMemo(
-    () => (allEntriesDoctorFilter === 'all' ? entries : entries.filter((e) => e.doctor_id === allEntriesDoctorFilter)),
-    [entries, allEntriesDoctorFilter]
-  );
+  // An invoice can have multiple payments, so "matches method X" means at
+  // least one of its billing_payments rows uses that method.
+  const methodsByBillingId = useMemo(() => {
+    const map = {};
+    payments.forEach((p) => {
+      if (!map[p.billing_id]) map[p.billing_id] = new Set();
+      map[p.billing_id].add(p.payment_method);
+    });
+    return map;
+  }, [payments]);
+
+  const allEntriesFiltered = useMemo(() => {
+    let filtered = allEntriesDoctorFilter === 'all' ? entries : entries.filter((e) => e.doctor_id === allEntriesDoctorFilter);
+    if (allEntriesMethodFilter !== 'all') {
+      filtered = filtered.filter((e) => methodsByBillingId[e.id]?.has(allEntriesMethodFilter));
+    }
+    return filtered;
+  }, [entries, allEntriesDoctorFilter, allEntriesMethodFilter, methodsByBillingId]);
 
   const byDate = useMemo(() => {
     const dateById = {};
@@ -133,12 +147,12 @@ export default function Billing({ profile, userEmail }) {
       if (!map[e.billing_date]) map[e.billing_date] = { total: 0, count: 0 };
       map[e.billing_date].count += 1;
     });
-    nonGiaPayments.forEach((p) => {
+    payments.forEach((p) => {
       const date = dateById[p.billing_id];
       if (date) map[date].total += Number(p.amount);
     });
     return Object.entries(map).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [entries, nonGiaPayments]);
+  }, [entries, payments]);
 
   return (
     <div>
@@ -217,6 +231,10 @@ export default function Billing({ profile, userEmail }) {
           <div className="label">Bank Account</div>
           <div className="value">{formatPKR(bankTotal)}</div>
         </div>
+        <div className="summary-tile">
+          <div className="label">Insurance</div>
+          <div className="value">{formatPKR(insuranceTotal)}</div>
+        </div>
       </div>
 
       <div className="card">
@@ -252,6 +270,17 @@ export default function Billing({ profile, userEmail }) {
               {doctors.map((d) => (
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
+            </select>
+          </div>
+          <div className="filter-field">
+            <label>Payment Method</label>
+            <select value={allEntriesMethodFilter} onChange={(e) => setAllEntriesMethodFilter(e.target.value)}>
+              <option value="all">All Methods</option>
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="bank_transfer">Bank Transfer</option>
+              <option value="insurance">Insurance</option>
+              <option value="other">Other</option>
             </select>
           </div>
         </div>

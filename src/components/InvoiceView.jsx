@@ -7,7 +7,7 @@ const PAYMENT_METHOD_LABEL = {
   cash: 'Cash',
   card: 'Card',
   bank_transfer: 'Bank Transfer',
-  gia_insurance: 'GIA (Insurance)',
+  insurance: 'Insurance',
   other: 'Other',
 };
 

@@ -10,6 +10,7 @@ import Billing from './pages/Billing';
 import Patients from './pages/Patients';
 import ManageDoctors from './pages/ManageDoctors';
 import Hub from './pages/Hub';
+import Expenses from './pages/Expenses';
 import DoctorOwnCalendar from './pages/DoctorOwnCalendar';
 import DoctorRevenue from './pages/DoctorRevenue';
 import DoctorPatients from './pages/DoctorPatients';
@@ -24,6 +25,7 @@ const PAGE_TITLES = {
   '/doctors': 'Manage Doctors',
   '/hub': 'Hub',
   '/revenue': 'Revenue',
+  '/expenses': 'Expenses',
 };
 
 function PageHeader() {
@@ -56,6 +58,7 @@ export default function App() {
   const isCeo = profile.role === 'ceo';
   const isAdmin = profile.role === 'admin';
   const isDoctor = profile.role === 'doctor';
+  const hasExpensesAccess = profile.has_expenses_access === true;
 
   const linkClass = ({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '');
   const closeNav = () => setMobileNavOpen(false);
@@ -91,6 +94,11 @@ export default function App() {
             <NavLink to="/patients" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Patients
             </NavLink>
+            {hasExpensesAccess && (
+              <NavLink to="/expenses" className={linkClass} onClick={closeNav}>
+                <span className="icon-dot" /> Expenses
+              </NavLink>
+            )}
             {isAdmin && (
               <NavLink to="/doctors" className={linkClass} onClick={closeNav}>
                 <span className="icon-dot" /> Manage Doctors
@@ -103,6 +111,11 @@ export default function App() {
             <NavLink to="/hub" className={linkClass} onClick={closeNav}>
               <span className="icon-dot" /> Hub
             </NavLink>
+            {hasExpensesAccess && (
+              <NavLink to="/expenses" className={linkClass} onClick={closeNav}>
+                <span className="icon-dot" /> Expenses
+              </NavLink>
+            )}
           </nav>
         )}
         {isDoctor && (
@@ -142,6 +155,7 @@ export default function App() {
               <>
                 <Route path="/" element={<Navigate to="/hub" replace />} />
                 <Route path="/hub" element={<Hub profile={profile} />} />
+                {hasExpensesAccess && <Route path="/expenses" element={<Expenses profile={profile} />} />}
                 <Route path="*" element={<Navigate to="/hub" replace />} />
               </>
             ) : isDoctor ? (
@@ -160,6 +174,7 @@ export default function App() {
                 <Route path="/calendar" element={<DoctorCalendar />} />
                 <Route path="/billing" element={<Billing profile={profile} userEmail={session.user.email} />} />
                 <Route path="/patients" element={<Patients />} />
+                {hasExpensesAccess && <Route path="/expenses" element={<Expenses profile={profile} />} />}
                 {isAdmin && <Route path="/doctors" element={<ManageDoctors />} />}
                 {isAdmin && <Route path="/hub" element={<Hub profile={profile} />} />}
                 <Route path="*" element={<Navigate to="/today" replace />} />

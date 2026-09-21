@@ -20,6 +20,7 @@ export default function Hub({ profile }) {
   const [rows, setRows] = useState([]);
   const [payments, setPayments] = useState([]);
   const [costs, setCosts] = useState([]);
+  const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [openCostFormFor, setOpenCostFormFor] = useState(null);
@@ -33,6 +34,7 @@ export default function Hub({ profile }) {
       { data: analyticsRows, error: rowErr },
       { data: costRows, error: costErr },
       { data: paymentRows, error: paymentsError },
+      { data: expenseRows, error: expensesError },
     ] = await Promise.all([
       supabase.from('doctors').select('*').eq('active', true).order('name'),
       supabase.from('billing_analytics').select('*').gte('billing_date', dateFrom).lte('billing_date', dateTo),
@@ -46,15 +48,18 @@ export default function Hub({ profile }) {
         .select('*, billing!inner(billing_date)')
         .gte('billing.billing_date', dateFrom)
         .lte('billing.billing_date', dateTo),
+      supabase.from('expenses').select('*').gte('expense_date', dateFrom).lte('expense_date', dateTo),
     ]);
     if (docErr) console.error(docErr.message);
     if (rowErr) console.error(rowErr.message);
     if (costErr) console.error(costErr.message);
     if (paymentsError) console.error(paymentsError.message);
+    if (expensesError) console.error(expensesError.message);
     setDoctors(docs || []);
     setRows(analyticsRows || []);
     setCosts(costRows || []);
     setPayments(paymentRows || []);
+    setExpenses(expenseRows || []);
     setLoading(false);
   }, [dateFrom, dateTo]);
 
@@ -62,28 +67,26 @@ export default function Hub({ profile }) {
     loadData();
   }, [loadData]);
 
-  // GIA Insurance is only actually collected at month-end, so every revenue
-  // total in Hub excludes it — computed per billing row from its own
-  // billing_payments rows (not billing_analytics.amount) so a mixed invoice
-  // (part GIA, part something else) only contributes its non-GIA portion.
-  const nonGiaAmountByBillingId = useMemo(() => {
+  // Revenue per billing row is computed from its own billing_payments rows
+  // (not billing_analytics.amount) so a multi-method invoice still sums
+  // correctly here.
+  const amountByBillingId = useMemo(() => {
     const map = {};
     payments.forEach((p) => {
-      if (p.payment_method === 'gia_insurance') return;
       map[p.billing_id] = (map[p.billing_id] || 0) + Number(p.amount);
     });
     return map;
   }, [payments]);
 
   function revenueFor(row) {
-    return nonGiaAmountByBillingId[row.id] || 0;
+    return amountByBillingId[row.id] || 0;
   }
 
-  const totalRevenue = useMemo(() => rows.reduce((s, r) => s + revenueFor(r), 0), [rows, nonGiaAmountByBillingId]);
+  const totalRevenue = useMemo(() => rows.reduce((s, r) => s + revenueFor(r), 0), [rows, amountByBillingId]);
 
   const serviceCategoryRevenue = useMemo(
     () => rows.filter((r) => r.is_service_category).reduce((s, r) => s + revenueFor(r), 0),
-    [rows, nonGiaAmountByBillingId]
+    [rows, amountByBillingId]
   );
 
   const doctorFinancials = useMemo(() => {
@@ -111,23 +114,27 @@ export default function Hub({ profile }) {
           ymdcShare,
         };
       });
-  }, [doctors, rows, costs, nonGiaAmountByBillingId]);
+  }, [doctors, rows, costs, amountByBillingId]);
 
   const ymdcRevenue = useMemo(
     () => doctorFinancials.reduce((s, f) => s + f.ymdcShare, 0) + serviceCategoryRevenue,
     [doctorFinancials, serviceCategoryRevenue]
   );
 
+  const totalExpenses = useMemo(() => expenses.reduce((s, e) => s + Number(e.amount), 0), [expenses]);
+
+  const profitLoss = ymdcRevenue - totalExpenses;
+
   const paymentBreakdown = useMemo(() => {
-    const nonGia = payments.filter((p) => p.payment_method !== 'gia_insurance');
-    const cash = nonGia.filter((p) => p.payment_method === 'cash').reduce((s, p) => s + Number(p.amount), 0);
-    const bank = nonGia
+    const cash = payments.filter((p) => p.payment_method === 'cash').reduce((s, p) => s + Number(p.amount), 0);
+    const bank = payments
       .filter((p) => p.payment_method === 'card' || p.payment_method === 'bank_transfer')
       .reduce((s, p) => s + Number(p.amount), 0);
-    const other = nonGia
-      .filter((p) => p.payment_method !== 'cash' && p.payment_method !== 'card' && p.payment_method !== 'bank_transfer')
+    const insurance = payments.filter((p) => p.payment_method === 'insurance').reduce((s, p) => s + Number(p.amount), 0);
+    const other = payments
+      .filter((p) => !['cash', 'card', 'bank_transfer', 'insurance'].includes(p.payment_method))
       .reduce((s, p) => s + Number(p.amount), 0);
-    return { cash, bank, other };
+    return { cash, bank, insurance, other };
   }, [payments]);
 
   const doctorWise = useMemo(() => {
@@ -141,7 +148,7 @@ export default function Hub({ profile }) {
         };
       })
       .sort((a, b) => b.total - a.total);
-  }, [doctors, rows, nonGiaAmountByBillingId]);
+  }, [doctors, rows, amountByBillingId]);
 
   const procedureChartData = useMemo(() => {
     const map = {};
@@ -156,7 +163,7 @@ export default function Hub({ profile }) {
     const data = top.map(([name, value]) => ({ name, value }));
     if (otherTotal > 0) data.push({ name: 'Other', value: otherTotal });
     return data;
-  }, [rows, nonGiaAmountByBillingId]);
+  }, [rows, amountByBillingId]);
 
   function openAddCost(doctorId) {
     setCostDraft({ description: '', amount: '', cost_date: today });
@@ -218,6 +225,16 @@ export default function Hub({ profile }) {
           <div className="value">{formatPKR(ymdcRevenue)}</div>
           <div className="hub-hero-sub">Centre's actual share, after splits &amp; costs</div>
         </div>
+        <div className="hub-hero-card">
+          <div className="label">Expenses</div>
+          <div className="value">{formatPKR(totalExpenses)}</div>
+          <div className="hub-hero-sub">All categories, selected range</div>
+        </div>
+        <div className={'hub-hero-card ' + (profitLoss < 0 ? 'hub-hero-card-negative' : 'hub-hero-card-positive')}>
+          <div className="label">Profit / Loss</div>
+          <div className="value">{formatPKR(profitLoss)}</div>
+          <div className="hub-hero-sub">YMDC share minus expenses</div>
+        </div>
       </div>
 
       <div className="card">
@@ -227,6 +244,7 @@ export default function Hub({ profile }) {
           <tbody>
             <tr><td>Cash</td><td>{formatPKR(paymentBreakdown.cash)}</td></tr>
             <tr><td>Bank Account (Card + Bank Transfer)</td><td>{formatPKR(paymentBreakdown.bank)}</td></tr>
+            <tr><td>Insurance</td><td>{formatPKR(paymentBreakdown.insurance)}</td></tr>
             <tr><td>Other</td><td>{formatPKR(paymentBreakdown.other)}</td></tr>
           </tbody>
         </table>

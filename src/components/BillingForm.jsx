@@ -273,7 +273,7 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
                 <option value="cash">Cash</option>
                 <option value="card">Card</option>
                 <option value="bank_transfer">Bank Transfer</option>
-                <option value="gia_insurance">GIA (Insurance)</option>
+                <option value="insurance">Insurance</option>
                 <option value="other">Other</option>
               </select>
             </div>
