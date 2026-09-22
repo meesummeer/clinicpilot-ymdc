@@ -173,7 +173,7 @@ export default function App() {
                 <Route path="/appointments" element={<Appointments profile={profile} />} />
                 <Route path="/calendar" element={<DoctorCalendar />} />
                 <Route path="/billing" element={<Billing profile={profile} userEmail={session.user.email} />} />
-                <Route path="/patients" element={<Patients />} />
+                <Route path="/patients" element={<Patients userEmail={session.user.email} />} />
                 {hasExpensesAccess && <Route path="/expenses" element={<Expenses profile={profile} />} />}
                 {isAdmin && <Route path="/doctors" element={<ManageDoctors />} />}
                 {isAdmin && <Route path="/hub" element={<Hub profile={profile} />} />}

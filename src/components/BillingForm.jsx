@@ -116,26 +116,17 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  async function selectPatient(patient) {
-    setForm((f) => ({ ...f, patient_name: patient.name, patient_phone: patient.phone || '' }));
+  function selectPatient(patient) {
+    setForm((f) => ({
+      ...f,
+      patient_name: patient.name,
+      patient_phone: patient.phone || '',
+      patient_age: patient.age != null ? String(patient.age) : f.patient_age,
+    }));
     setPhoneMatch(!!patient.phone);
     setPatientSearch('');
     setPatientResults([]);
     setPatientSearchOpen(false);
-
-    if (!patient.phone) return;
-    const { data, error: ageError } = await supabase
-      .from('patient_last_visit')
-      .select('last_age')
-      .eq('phone', patient.phone)
-      .maybeSingle();
-    if (ageError) {
-      console.error(ageError.message);
-      return;
-    }
-    if (data?.last_age != null) {
-      setForm((f) => ({ ...f, patient_age: String(data.last_age) }));
-    }
   }
 
   // Tracks the last value we auto-filled into Service, so a doctor change
@@ -181,7 +172,11 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
     }
     if (data) {
       setPhoneMatch(true);
-      setForm((f) => ({ ...f, patient_name: data.name }));
+      setForm((f) => ({
+        ...f,
+        patient_name: data.name,
+        patient_age: data.age != null ? String(data.age) : f.patient_age,
+      }));
     } else {
       setPhoneMatch(false);
     }
@@ -246,9 +241,13 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
 
     const phone = form.patient_phone.trim();
     if (phone) {
+      const patientPayload = { phone, name: form.patient_name };
+      if (form.patient_age) {
+        patientPayload.age = parseInt(form.patient_age, 10);
+      }
       const { error: patientError } = await supabase
         .from('patients')
-        .upsert({ phone, name: form.patient_name }, { onConflict: 'phone' });
+        .upsert(patientPayload, { onConflict: 'phone' });
       if (patientError) console.error(patientError.message);
     }
 

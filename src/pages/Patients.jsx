@@ -2,13 +2,25 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
 
-export default function Patients() {
+function emptyEditForm() {
+  return { name: '', phone: '', gender: '', age: '' };
+}
+
+export default function Patients({ userEmail }) {
+  const canDelete = userEmail === 'meesummir@icloud.com';
+
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
 
-  useEffect(() => {
+  const [editingPatient, setEditingPatient] = useState(null);
+  const [editForm, setEditForm] = useState(emptyEditForm());
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  function loadPatients() {
+    setLoading(true);
     supabase
       .from('patient_last_visit')
       .select('*')
@@ -17,7 +29,9 @@ export default function Patients() {
         setPatients(data || []);
         setLoading(false);
       });
-  }, []);
+  }
+
+  useEffect(loadPatients, []);
 
   const sorted = useMemo(() => {
     return [...patients].sort((a, b) => {
@@ -36,6 +50,63 @@ export default function Patients() {
     );
   }, [sorted, search]);
 
+  function openEdit(patient) {
+    setEditingPatient(patient);
+    setEditForm({
+      name: patient.name || '',
+      phone: patient.phone || '',
+      gender: patient.gender || '',
+      age: patient.age != null ? String(patient.age) : '',
+    });
+    setEditError('');
+  }
+
+  function closeEdit() {
+    setEditingPatient(null);
+    setEditForm(emptyEditForm());
+    setEditError('');
+  }
+
+  function updateEditForm(field, value) {
+    setEditForm((f) => ({ ...f, [field]: value }));
+  }
+
+  async function handleEditSubmit(e) {
+    e.preventDefault();
+    setEditSaving(true);
+    setEditError('');
+
+    const payload = {
+      name: editForm.name,
+      phone: editForm.phone,
+      gender: editForm.gender || null,
+      age: editForm.age ? parseInt(editForm.age, 10) : null,
+    };
+
+    const { error: updateError } = await supabase
+      .from('patients')
+      .update(payload)
+      .eq('id', editingPatient.id);
+
+    setEditSaving(false);
+    if (updateError) {
+      setEditError(updateError.message);
+      return;
+    }
+    closeEdit();
+    loadPatients();
+  }
+
+  async function handleDelete(patient) {
+    if (!window.confirm("Delete this patient record? This can't be undone.")) return;
+    const { error: deleteError } = await supabase.from('patients').delete().eq('id', patient.id);
+    if (deleteError) {
+      alert(deleteError.message);
+      return;
+    }
+    loadPatients();
+  }
+
   return (
     <div>
       <div className="card">
@@ -52,6 +123,45 @@ export default function Patients() {
         </div>
       </div>
 
+      {editingPatient && canDelete && (
+        <form className="card" onSubmit={handleEditSubmit} style={{ borderTop: '4px solid var(--gold)' }}>
+          <h3 style={{ marginTop: 0 }}>Edit Patient</h3>
+          {editError && <div className="error-text">{editError}</div>}
+          <div className="filters-row">
+            <div className="filter-field">
+              <label>Name</label>
+              <input value={editForm.name} onChange={(e) => updateEditForm('name', e.target.value)} required />
+            </div>
+            <div className="filter-field">
+              <label>Phone</label>
+              <input value={editForm.phone} onChange={(e) => updateEditForm('phone', e.target.value)} required />
+            </div>
+            <div className="filter-field">
+              <label>Gender</label>
+              <select value={editForm.gender} onChange={(e) => updateEditForm('gender', e.target.value)}>
+                <option value="">Select…</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="filter-field">
+              <label>Age</label>
+              <input
+                type="number"
+                min="0"
+                value={editForm.age}
+                onChange={(e) => updateEditForm('age', e.target.value)}
+              />
+            </div>
+          </div>
+          <button type="submit" className="btn-primary" disabled={editSaving} style={{ marginRight: 8 }}>
+            {editSaving ? 'Saving…' : 'Save Changes'}
+          </button>
+          <button type="button" className="btn-secondary" onClick={closeEdit}>Cancel</button>
+        </form>
+      )}
+
       <div className="card">
         {loading ? (
           <p>Loading…</p>
@@ -60,16 +170,30 @@ export default function Patients() {
         ) : (
           <table className="data-table">
             <thead>
-              <tr><th>Name</th><th>Phone</th><th>Age</th><th>Last Visit</th><th>Last Procedure</th></tr>
+              <tr>
+                <th>Name</th><th>Phone</th><th>Age</th><th>Last Visit</th><th>Last Procedure</th>
+                {canDelete && <th></th>}
+                {canDelete && <th></th>}
+              </tr>
             </thead>
             <tbody>
               {filtered.map((p) => (
                 <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(p)}>
                   <td>{p.name}</td>
                   <td>{p.phone || '—'}</td>
-                  <td>{p.last_age != null ? p.last_age : '—'}</td>
+                  <td>{p.age != null ? p.age : '—'}</td>
                   <td>{p.last_visit_date ? formatDateDMY(p.last_visit_date) : '—'}</td>
                   <td>{p.last_procedure || '—'}</td>
+                  {canDelete && (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button className="btn-secondary" onClick={() => openEdit(p)}>Edit</button>
+                    </td>
+                  )}
+                  {canDelete && (
+                    <td onClick={(e) => e.stopPropagation()}>
+                      <button className="btn-danger-outline" onClick={() => handleDelete(p)}>Delete</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -91,7 +215,7 @@ export default function Patients() {
             </div>
             <div className="modal-field">
               <span className="label">Age</span>
-              <span className="value">{selected.last_age != null ? selected.last_age : '—'}</span>
+              <span className="value">{selected.age != null ? selected.age : '—'}</span>
             </div>
             <div className="modal-field">
               <span className="label">Last Visit</span>
