@@ -60,13 +60,14 @@ export default function Patients() {
         ) : (
           <table className="data-table">
             <thead>
-              <tr><th>Name</th><th>Phone</th><th>Last Visit</th><th>Last Procedure</th></tr>
+              <tr><th>Name</th><th>Phone</th><th>Age</th><th>Last Visit</th><th>Last Procedure</th></tr>
             </thead>
             <tbody>
               {filtered.map((p) => (
                 <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(p)}>
                   <td>{p.name}</td>
                   <td>{p.phone || '—'}</td>
+                  <td>{p.last_age != null ? p.last_age : '—'}</td>
                   <td>{p.last_visit_date ? formatDateDMY(p.last_visit_date) : '—'}</td>
                   <td>{p.last_procedure || '—'}</td>
                 </tr>
@@ -87,6 +88,10 @@ export default function Patients() {
             <div className="modal-field">
               <span className="label">Phone</span>
               <span className="value">{selected.phone || '—'}</span>
+            </div>
+            <div className="modal-field">
+              <span className="label">Age</span>
+              <span className="value">{selected.last_age != null ? selected.last_age : '—'}</span>
             </div>
             <div className="modal-field">
               <span className="label">Last Visit</span>

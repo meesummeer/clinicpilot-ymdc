@@ -116,12 +116,26 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  function selectPatient(patient) {
+  async function selectPatient(patient) {
     setForm((f) => ({ ...f, patient_name: patient.name, patient_phone: patient.phone || '' }));
     setPhoneMatch(!!patient.phone);
     setPatientSearch('');
     setPatientResults([]);
     setPatientSearchOpen(false);
+
+    if (!patient.phone) return;
+    const { data, error: ageError } = await supabase
+      .from('patient_last_visit')
+      .select('last_age')
+      .eq('phone', patient.phone)
+      .maybeSingle();
+    if (ageError) {
+      console.error(ageError.message);
+      return;
+    }
+    if (data?.last_age != null) {
+      setForm((f) => ({ ...f, patient_age: String(data.last_age) }));
+    }
   }
 
   // Tracks the last value we auto-filled into Service, so a doctor change
