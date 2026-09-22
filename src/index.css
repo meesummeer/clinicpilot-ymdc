@@ -559,6 +559,37 @@ table.data-table tbody tr:hover td { background: #F9F9FD; }
 .hub-split-block-gold { background: #FBF3DE; }
 .hub-split-block-gold .value { color: #8A6D0F; }
 
+/* ── Hub: historical P&L archive (distinct from live data) ───────── */
+.hub-archive-section {
+  border-top: 4px dashed var(--gold);
+  margin-top: 32px;
+}
+.hub-archive-section h3 { margin-top: 0; color: var(--navy); }
+.hub-archive-caption {
+  font-size: 12.5px;
+  color: var(--grey-text-light);
+  font-style: italic;
+  margin: -6px 0 18px;
+}
+.hub-archive-table th:first-child,
+.hub-archive-table td:first-child { text-align: left; }
+.hub-archive-table th:not(:first-child),
+.hub-archive-table td:not(:first-child) { text-align: right; }
+.hub-archive-section-row td {
+  background: #F6F7FB;
+  color: var(--navy);
+  font-weight: 800;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.hub-archive-total-row td {
+  font-weight: 800;
+  border-top: 2px solid var(--navy);
+  background: #FBF3DE;
+}
+.hub-archive-negative { color: var(--red); }
+
 /* ── Generic modal overlay (e.g. Patients detail popup) ──────────── */
 .modal-overlay {
   position: fixed;

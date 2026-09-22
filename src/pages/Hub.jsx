@@ -1,11 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { supabase } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
+
+const ARCHIVE_INCOME_CATEGORIES = ['Services', 'Dental', 'Consultation', 'X-Ray', 'Ultrasound', 'Orthotics'];
+const ARCHIVE_EXPENSE_CATEGORIES = [
+  'Aesthetic Purchasing',
+  'Tea Expense',
+  'Cleaning Material',
+  'Salary',
+  'Consultation Sharing',
+  'Electric Bills',
+  'Utility Bills',
+  'Telephone Bill',
+  'Internet',
+  'Advertising and Promo',
+  'Gen Expenses',
+  'Licenses and Permits',
+];
 
 export default function Hub({ profile }) {
   const isAdmin = profile?.role === 'admin';
@@ -66,6 +82,59 @@ export default function Hub({ profile }) {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Historical P&L archive — a separate, manually-reconciled dataset, not
+  // derived from or blended with the live billing/expenses data above.
+  const [archiveRows, setArchiveRows] = useState([]);
+  const [archiveLoading, setArchiveLoading] = useState(true);
+
+  useEffect(() => {
+    supabase
+      .from('monthly_pnl_archive')
+      .select('*')
+      .order('month_date', { ascending: true })
+      .then(({ data, error }) => {
+        if (error) console.error(error.message);
+        setArchiveRows(data || []);
+        setArchiveLoading(false);
+      });
+  }, []);
+
+  const archiveMonths = useMemo(() => {
+    const seen = new Map();
+    archiveRows.forEach((r) => {
+      if (!seen.has(r.month_label)) seen.set(r.month_label, r.month_date);
+    });
+    return Array.from(seen.keys()).map((month_label) => ({ month_label }));
+  }, [archiveRows]);
+
+  const archiveMonthlyTotals = useMemo(() => {
+    return archiveMonths.map(({ month_label }) => {
+      const monthRows = archiveRows.filter((r) => r.month_label === month_label);
+      const income = monthRows.filter((r) => r.section === 'income').reduce((s, r) => s + Number(r.amount), 0);
+      const expense = monthRows.filter((r) => r.section === 'expense').reduce((s, r) => s + Number(r.amount), 0);
+      return { month_label, income, expense, net: income - expense };
+    });
+  }, [archiveMonths, archiveRows]);
+
+  const archiveCellMaps = useMemo(() => {
+    const income = {};
+    const expense = {};
+    archiveRows.forEach((r) => {
+      const target = r.section === 'income' ? income : expense;
+      if (!target[r.month_label]) target[r.month_label] = {};
+      target[r.month_label][r.category] = Number(r.amount);
+    });
+    return { income, expense };
+  }, [archiveRows]);
+
+  function archiveCellValue(monthLabel, category, section) {
+    if (section === 'expense' && monthLabel === 'August 2026 (Final)' && category === 'Consultation Sharing') {
+      return 'N/A — netted into income';
+    }
+    const value = archiveCellMaps[section]?.[monthLabel]?.[category];
+    return value == null ? '—' : formatPKR(value);
+  }
 
   // Revenue per billing row is computed from its own billing_payments rows
   // (not billing_analytics.amount) so a multi-method invoice still sums
@@ -400,6 +469,93 @@ export default function Hub({ profile }) {
               </div>
             </div>
           ))
+        )}
+      </div>
+
+      <div className="card hub-archive-section">
+        <h3>Historical P&amp;L (Archived Reports)</h3>
+        <div className="hub-archive-caption">Manually reconciled monthly reports — not live data.</div>
+
+        {archiveLoading ? (
+          <p>Loading…</p>
+        ) : archiveMonthlyTotals.length === 0 ? (
+          <div className="empty-state">No archived reports yet.</div>
+        ) : (
+          <>
+            <div style={{ width: '100%', height: 300, marginBottom: 28 }}>
+              <ResponsiveContainer>
+                <BarChart data={archiveMonthlyTotals} margin={{ top: 28, right: 24, bottom: 8, left: 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month_label" tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={(v) => formatPKR(v)} tick={{ fontSize: 11 }} />
+                  <Tooltip formatter={(v) => formatPKR(v)} />
+                  <Bar dataKey="net" name="Net Income" radius={[6, 6, 0, 0]}>
+                    <LabelList dataKey="net" position="top" formatter={(v) => formatPKR(v)} style={{ fontSize: 11, fontWeight: 700, fill: 'var(--navy)' }} />
+                    {archiveMonthlyTotals.map((m) => (
+                      <Cell key={m.month_label} fill={m.net < 0 ? '#B22222' : '#C9A227'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <table className="data-table hub-archive-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  {archiveMonths.map((m) => (
+                    <th key={m.month_label}>{m.month_label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="hub-archive-section-row">
+                  <td colSpan={archiveMonths.length + 1}>Income</td>
+                </tr>
+                {ARCHIVE_INCOME_CATEGORIES.map((cat) => (
+                  <tr key={cat}>
+                    <td>{cat}</td>
+                    {archiveMonths.map((m) => (
+                      <td key={m.month_label}>{archiveCellValue(m.month_label, cat, 'income')}</td>
+                    ))}
+                  </tr>
+                ))}
+                <tr className="hub-archive-section-row">
+                  <td colSpan={archiveMonths.length + 1}>Expense</td>
+                </tr>
+                {ARCHIVE_EXPENSE_CATEGORIES.map((cat) => (
+                  <tr key={cat}>
+                    <td>{cat}</td>
+                    {archiveMonths.map((m) => (
+                      <td key={m.month_label}>{archiveCellValue(m.month_label, cat, 'expense')}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="hub-archive-total-row">
+                  <td>Total Income</td>
+                  {archiveMonthlyTotals.map((m) => (
+                    <td key={m.month_label}>{formatPKR(m.income)}</td>
+                  ))}
+                </tr>
+                <tr className="hub-archive-total-row">
+                  <td>Total Expense</td>
+                  {archiveMonthlyTotals.map((m) => (
+                    <td key={m.month_label}>{formatPKR(m.expense)}</td>
+                  ))}
+                </tr>
+                <tr className="hub-archive-total-row">
+                  <td>Net Income</td>
+                  {archiveMonthlyTotals.map((m) => (
+                    <td key={m.month_label} className={m.net < 0 ? 'hub-archive-negative' : ''}>
+                      {formatPKR(m.net)}
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
+          </>
         )}
       </div>
     </div>
