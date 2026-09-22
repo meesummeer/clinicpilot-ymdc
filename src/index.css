@@ -582,6 +582,43 @@ table.data-table tbody tr:hover td { background: #F9F9FD; }
 .modal-field .label { color: var(--grey-text); font-weight: 600; }
 .modal-field .value { color: #1E2130; font-weight: 600; text-align: right; }
 
+/* ── Patient search dropdown (BillingForm) ───────────────────────── */
+.patient-search-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  background: white;
+  border: 1.5px solid var(--border-grey);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  z-index: 20;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.patient-search-result {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border-grey);
+  text-align: left;
+  cursor: pointer;
+  font-size: 13.5px;
+  color: #1E2130;
+  transition: var(--transition);
+}
+.patient-search-result:last-child { border-bottom: none; }
+.patient-search-result:hover { background: #F6F7FB; }
+.patient-search-name { font-weight: 600; }
+.patient-search-phone { font-size: 12px; color: var(--grey-text); }
+.patient-search-empty { padding: 12px; font-size: 13px; color: var(--grey-text-light); text-align: center; }
+
 /* ── Mobile (max-width: 768px) ────────────────────────────────────
    Everything above this breakpoint is untouched — the desktop layout
    keeps behaving exactly as it does today. These elements exist in

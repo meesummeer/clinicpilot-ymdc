@@ -47,6 +47,13 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
   const [phoneMatch, setPhoneMatch] = useState(false);
   const [pendingAction, setPendingAction] = useState('save');
 
+  // Patient search — debounced lookup by name or phone, shown as a dropdown
+  // above the Patient Name/Phone fields.
+  const [patientSearch, setPatientSearch] = useState('');
+  const [patientResults, setPatientResults] = useState([]);
+  const [patientSearchOpen, setPatientSearchOpen] = useState(false);
+  const patientSearchRef = useRef(null);
+
   // Payment rows — defaults to one empty row for a new entry, or the entry's
   // legacy single amount/method until its real billing_payments rows load.
   const [payments, setPayments] = useState(() =>
@@ -71,6 +78,51 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
         }
       });
   }, [entry?.id]);
+
+  useEffect(() => {
+    const query = patientSearch.trim();
+    if (!query) {
+      setPatientResults([]);
+      setPatientSearchOpen(false);
+      return;
+    }
+    const timeout = setTimeout(async () => {
+      // Strip characters that would break PostgREST's or() filter syntax —
+      // neither a name nor a phone number legitimately contains these.
+      const safeQuery = query.replace(/[,()]/g, '');
+      if (!safeQuery) return;
+      const { data, error: searchError } = await supabase
+        .from('patients')
+        .select('*')
+        .or(`name.ilike.%${safeQuery}%,phone.ilike.%${safeQuery}%`)
+        .limit(8);
+      if (searchError) {
+        console.error(searchError.message);
+        return;
+      }
+      setPatientResults(data || []);
+      setPatientSearchOpen(true);
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [patientSearch]);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (patientSearchRef.current && !patientSearchRef.current.contains(e.target)) {
+        setPatientSearchOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  function selectPatient(patient) {
+    setForm((f) => ({ ...f, patient_name: patient.name, patient_phone: patient.phone || '' }));
+    setPhoneMatch(!!patient.phone);
+    setPatientSearch('');
+    setPatientResults([]);
+    setPatientSearchOpen(false);
+  }
 
   // Tracks the last value we auto-filled into Service, so a doctor change
   // only overwrites it if the user hasn't customized it since.
@@ -187,6 +239,9 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
     }
 
     setSaving(false);
+    setPatientSearch('');
+    setPatientResults([]);
+    setPatientSearchOpen(false);
     if (pendingAction === 'print' && onSavedAndPrint) {
       onSavedAndPrint(data);
     } else {
@@ -198,6 +253,37 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
     <form className="card" onSubmit={handleSubmit} style={{ borderTop: '4px solid var(--gold)' }}>
       <h3 style={{ marginTop: 0 }}>{isEditing ? 'Edit Billing Entry' : 'New Billing Entry'}</h3>
       {error && <div className="error-text">{error}</div>}
+      <div className="filter-field" style={{ position: 'relative', marginBottom: 14 }} ref={patientSearchRef}>
+        <label>Find Existing Patient</label>
+        <input
+          style={{ width: '100%' }}
+          placeholder="Search patient by name or phone..."
+          value={patientSearch}
+          onChange={(e) => setPatientSearch(e.target.value)}
+          onFocus={() => {
+            if (patientResults.length > 0) setPatientSearchOpen(true);
+          }}
+        />
+        {patientSearchOpen && (
+          <div className="patient-search-dropdown">
+            {patientResults.length === 0 ? (
+              <div className="patient-search-empty">No matching patients</div>
+            ) : (
+              patientResults.map((p) => (
+                <button
+                  type="button"
+                  key={p.id}
+                  className="patient-search-result"
+                  onClick={() => selectPatient(p)}
+                >
+                  <span className="patient-search-name">{p.name}</span>
+                  <span className="patient-search-phone">{p.phone || '—'}</span>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+      </div>
       <div className="filters-row">
         <div className="filter-field">
           <label>Patient Name</label>
