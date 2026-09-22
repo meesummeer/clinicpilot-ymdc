@@ -34,7 +34,6 @@ export default function Hub({ profile }) {
 
   const [doctors, setDoctors] = useState([]);
   const [rows, setRows] = useState([]);
-  const [payments, setPayments] = useState([]);
   const [costs, setCosts] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -49,32 +48,26 @@ export default function Hub({ profile }) {
       { data: docs, error: docErr },
       { data: analyticsRows, error: rowErr },
       { data: costRows, error: costErr },
-      { data: paymentRows, error: paymentsError },
       { data: expenseRows, error: expensesError },
     ] = await Promise.all([
       supabase.from('doctors').select('*').eq('active', true).order('name'),
+      // billing_analytics already has role-based access built in (admin,
+      // ceo, and doctor-scoped) and carries everything needed for revenue
+      // math — amount, payment_method, doctor_id, etc — with no patient
+      // PII. Querying billing/billing_payments directly here (even via an
+      // embedded join) hits billing_select_staff, which blocks ceo and
+      // silently zeroes out these totals for that role.
       supabase.from('billing_analytics').select('*').gte('billing_date', dateFrom).lte('billing_date', dateTo),
       supabase.from('doctor_costs').select('*').gte('cost_date', dateFrom).lte('cost_date', dateTo),
-      // Filter billing_payments server-side via a join on the date range
-      // instead of fetching billing IDs first and passing them as a giant
-      // .in() list — that list gets long enough with a wide date range to
-      // exceed the URL length limit and 400 the request.
-      supabase
-        .from('billing_payments')
-        .select('*, billing!inner(billing_date)')
-        .gte('billing.billing_date', dateFrom)
-        .lte('billing.billing_date', dateTo),
       supabase.from('expenses').select('*').gte('expense_date', dateFrom).lte('expense_date', dateTo),
     ]);
     if (docErr) console.error(docErr.message);
     if (rowErr) console.error(rowErr.message);
     if (costErr) console.error(costErr.message);
-    if (paymentsError) console.error(paymentsError.message);
     if (expensesError) console.error(expensesError.message);
     setDoctors(docs || []);
     setRows(analyticsRows || []);
     setCosts(costRows || []);
-    setPayments(paymentRows || []);
     setExpenses(expenseRows || []);
     setLoading(false);
   }, [dateFrom, dateTo]);
@@ -136,26 +129,19 @@ export default function Hub({ profile }) {
     return value == null ? '—' : formatPKR(value);
   }
 
-  // Revenue per billing row is computed from its own billing_payments rows
-  // (not billing_analytics.amount) so a multi-method invoice still sums
-  // correctly here.
-  const amountByBillingId = useMemo(() => {
-    const map = {};
-    payments.forEach((p) => {
-      map[p.billing_id] = (map[p.billing_id] || 0) + Number(p.amount);
-    });
-    return map;
-  }, [payments]);
-
+  // billing_analytics.amount is each billing row's full invoice total
+  // (already summed across payment methods when the entry was saved), so
+  // revenue per row is just the row's own amount — no separate
+  // billing_payments query needed.
   function revenueFor(row) {
-    return amountByBillingId[row.id] || 0;
+    return Number(row.amount) || 0;
   }
 
-  const totalRevenue = useMemo(() => rows.reduce((s, r) => s + revenueFor(r), 0), [rows, amountByBillingId]);
+  const totalRevenue = useMemo(() => rows.reduce((s, r) => s + revenueFor(r), 0), [rows]);
 
   const serviceCategoryRevenue = useMemo(
     () => rows.filter((r) => r.is_service_category).reduce((s, r) => s + revenueFor(r), 0),
-    [rows, amountByBillingId]
+    [rows]
   );
 
   const doctorFinancials = useMemo(() => {
@@ -183,7 +169,7 @@ export default function Hub({ profile }) {
           ymdcShare,
         };
       });
-  }, [doctors, rows, costs, amountByBillingId]);
+  }, [doctors, rows, costs]);
 
   const ymdcRevenue = useMemo(
     () => doctorFinancials.reduce((s, f) => s + f.ymdcShare, 0) + serviceCategoryRevenue,
@@ -195,16 +181,16 @@ export default function Hub({ profile }) {
   const profitLoss = ymdcRevenue - totalExpenses;
 
   const paymentBreakdown = useMemo(() => {
-    const cash = payments.filter((p) => p.payment_method === 'cash').reduce((s, p) => s + Number(p.amount), 0);
-    const bank = payments
-      .filter((p) => p.payment_method === 'card' || p.payment_method === 'bank_transfer')
-      .reduce((s, p) => s + Number(p.amount), 0);
-    const insurance = payments.filter((p) => p.payment_method === 'insurance').reduce((s, p) => s + Number(p.amount), 0);
-    const other = payments
-      .filter((p) => !['cash', 'card', 'bank_transfer', 'insurance'].includes(p.payment_method))
-      .reduce((s, p) => s + Number(p.amount), 0);
+    const cash = rows.filter((r) => r.payment_method === 'cash').reduce((s, r) => s + revenueFor(r), 0);
+    const bank = rows
+      .filter((r) => r.payment_method === 'card' || r.payment_method === 'bank_transfer')
+      .reduce((s, r) => s + revenueFor(r), 0);
+    const insurance = rows.filter((r) => r.payment_method === 'insurance').reduce((s, r) => s + revenueFor(r), 0);
+    const other = rows
+      .filter((r) => !['cash', 'card', 'bank_transfer', 'insurance'].includes(r.payment_method))
+      .reduce((s, r) => s + revenueFor(r), 0);
     return { cash, bank, insurance, other };
-  }, [payments]);
+  }, [rows]);
 
   const doctorWise = useMemo(() => {
     return doctors
@@ -217,7 +203,7 @@ export default function Hub({ profile }) {
         };
       })
       .sort((a, b) => b.total - a.total);
-  }, [doctors, rows, amountByBillingId]);
+  }, [doctors, rows]);
 
   const procedureChartData = useMemo(() => {
     const map = {};
@@ -232,7 +218,7 @@ export default function Hub({ profile }) {
     const data = top.map(([name, value]) => ({ name, value }));
     if (otherTotal > 0) data.push({ name: 'Other', value: otherTotal });
     return data;
-  }, [rows, amountByBillingId]);
+  }, [rows]);
 
   function openAddCost(doctorId) {
     setCostDraft({ description: '', amount: '', cost_date: today });
