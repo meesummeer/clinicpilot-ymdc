@@ -115,6 +115,11 @@ export default function Billing({ profile, userEmail }) {
     [payments]
   );
 
+  const otherTotal = useMemo(
+    () => payments.filter((p) => p.payment_method === 'other').reduce((s, p) => s + Number(p.amount), 0),
+    [payments]
+  );
+
   const reportEntries = useMemo(
     () => (reportDate ? entries.filter((e) => e.billing_date === reportDate) : []),
     [reportDate, entries]
@@ -234,6 +239,10 @@ export default function Billing({ profile, userEmail }) {
         <div className="summary-tile">
           <div className="label">Insurance</div>
           <div className="value">{formatPKR(insuranceTotal)}</div>
+        </div>
+        <div className="summary-tile">
+          <div className="label">Other</div>
+          <div className="value">{formatPKR(otherTotal)}</div>
         </div>
       </div>
 
