@@ -24,6 +24,16 @@ function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
 
+// Cash, Card, Bank Transfer, Insurance are the only four payment methods —
+// "Other" was fully migrated to Insurance in the database and is no longer
+// selectable anywhere.
+const PAYMENT_METHOD_LABELS = {
+  cash: 'Cash',
+  card: 'Card',
+  bank_transfer: 'Bank Transfer',
+  insurance: 'Insurance',
+};
+
 function emptyPayment() {
   return { payment_method: 'cash', amount: '' };
 }
@@ -209,7 +219,13 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
 
     setSaving(true);
     const totalAmount = validPayments.reduce((s, p) => s + p.amount, 0);
-    const overallPaymentMethod = validPayments.length === 1 ? validPayments[0].payment_method : 'other';
+    // A split entry's overall method is a readable combination of the
+    // distinct methods used (e.g. "Cash + Card") rather than a single
+    // "Other" bucket, since Other no longer exists as a payment method.
+    const overallPaymentMethod =
+      validPayments.length === 1
+        ? validPayments[0].payment_method
+        : [...new Set(validPayments.map((p) => PAYMENT_METHOD_LABELS[p.payment_method] || p.payment_method))].join(' + ');
 
     const payload = {
       ...form,
@@ -373,7 +389,6 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
                 <option value="card">Card</option>
                 <option value="bank_transfer">Bank Transfer</option>
                 <option value="insurance">Insurance</option>
-                <option value="other">Other</option>
               </select>
             </div>
             <div className="filter-field">

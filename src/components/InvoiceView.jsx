@@ -8,7 +8,6 @@ const PAYMENT_METHOD_LABEL = {
   card: 'Card',
   bank_transfer: 'Bank Transfer',
   insurance: 'Insurance',
-  other: 'Other',
 };
 
 export default function InvoiceView({ entry, onClose, autoPrint }) {

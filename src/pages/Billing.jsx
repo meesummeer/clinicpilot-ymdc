@@ -115,22 +115,17 @@ export default function Billing({ profile, userEmail }) {
     [payments]
   );
 
-  const otherTotal = useMemo(
-    () => payments.filter((p) => p.payment_method === 'other').reduce((s, p) => s + Number(p.amount), 0),
-    [payments]
-  );
-
   const reportEntries = useMemo(
     () => (reportDate ? entries.filter((e) => e.billing_date === reportDate) : []),
     [reportDate, entries]
   );
 
-  // The Method column shows each entry's own payment_method (its actual,
-  // single value — 'other' when an invoice is split across methods), so
-  // the filter matches that same field exactly rather than checking
-  // whether any of the invoice's underlying billing_payments rows used the
-  // selected method — otherwise a filter can return rows whose displayed
-  // Method doesn't match what was selected.
+  // The Method column shows each entry's own payment_method (a combined
+  // label like "Cash + Card" for a split invoice), so the filter matches
+  // that same field exactly rather than checking whether any of the
+  // invoice's underlying billing_payments rows used the selected method —
+  // otherwise a filter can return rows whose displayed Method doesn't
+  // match what was selected.
   const allEntriesFiltered = useMemo(() => {
     let filtered = allEntriesDoctorFilter === 'all' ? entries : entries.filter((e) => e.doctor_id === allEntriesDoctorFilter);
     if (allEntriesMethodFilter !== 'all') {
@@ -235,10 +230,6 @@ export default function Billing({ profile, userEmail }) {
           <div className="label">Insurance</div>
           <div className="value">{formatPKR(insuranceTotal)}</div>
         </div>
-        <div className="summary-tile">
-          <div className="label">Other</div>
-          <div className="value">{formatPKR(otherTotal)}</div>
-        </div>
       </div>
 
       <div className="card">
@@ -284,7 +275,6 @@ export default function Billing({ profile, userEmail }) {
               <option value="card">Card</option>
               <option value="bank_transfer">Bank Transfer</option>
               <option value="insurance">Insurance</option>
-              <option value="other">Other</option>
             </select>
           </div>
         </div>

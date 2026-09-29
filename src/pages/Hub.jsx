@@ -186,10 +186,7 @@ export default function Hub({ profile }) {
       .filter((r) => r.payment_method === 'card' || r.payment_method === 'bank_transfer')
       .reduce((s, r) => s + revenueFor(r), 0);
     const insurance = rows.filter((r) => r.payment_method === 'insurance').reduce((s, r) => s + revenueFor(r), 0);
-    const other = rows
-      .filter((r) => !['cash', 'card', 'bank_transfer', 'insurance'].includes(r.payment_method))
-      .reduce((s, r) => s + revenueFor(r), 0);
-    return { cash, bank, insurance, other };
+    return { cash, bank, insurance };
   }, [rows]);
 
   const doctorWise = useMemo(() => {
@@ -300,7 +297,6 @@ export default function Hub({ profile }) {
             <tr><td>Cash</td><td>{formatPKR(paymentBreakdown.cash)}</td></tr>
             <tr><td>Bank Account (Card + Bank Transfer)</td><td>{formatPKR(paymentBreakdown.bank)}</td></tr>
             <tr><td>Insurance</td><td>{formatPKR(paymentBreakdown.insurance)}</td></tr>
-            <tr><td>Other</td><td>{formatPKR(paymentBreakdown.other)}</td></tr>
           </tbody>
         </table>
       </div>
