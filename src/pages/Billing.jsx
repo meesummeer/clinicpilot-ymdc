@@ -125,39 +125,34 @@ export default function Billing({ profile, userEmail }) {
     [reportDate, entries]
   );
 
-  // An invoice can have multiple payments, so "matches method X" means at
-  // least one of its billing_payments rows uses that method.
-  const methodsByBillingId = useMemo(() => {
-    const map = {};
-    payments.forEach((p) => {
-      if (!map[p.billing_id]) map[p.billing_id] = new Set();
-      map[p.billing_id].add(p.payment_method);
-    });
-    return map;
-  }, [payments]);
-
+  // The Method column shows each entry's own payment_method (its actual,
+  // single value — 'other' when an invoice is split across methods), so
+  // the filter matches that same field exactly rather than checking
+  // whether any of the invoice's underlying billing_payments rows used the
+  // selected method — otherwise a filter can return rows whose displayed
+  // Method doesn't match what was selected.
   const allEntriesFiltered = useMemo(() => {
     let filtered = allEntriesDoctorFilter === 'all' ? entries : entries.filter((e) => e.doctor_id === allEntriesDoctorFilter);
     if (allEntriesMethodFilter !== 'all') {
-      filtered = filtered.filter((e) => methodsByBillingId[e.id]?.has(allEntriesMethodFilter));
+      filtered = filtered.filter((e) => e.payment_method === allEntriesMethodFilter);
     }
     return filtered;
-  }, [entries, allEntriesDoctorFilter, allEntriesMethodFilter, methodsByBillingId]);
+  }, [entries, allEntriesDoctorFilter, allEntriesMethodFilter]);
 
+  // Count and total both come from entries (the billing table) and its own
+  // amount field — a single consistent source, rather than pairing entries
+  // (for count) with a separately-fetched billing_payments join (for
+  // total), which can disagree if the two queries' results aren't
+  // perfectly in sync for a given date.
   const byDate = useMemo(() => {
-    const dateById = {};
     const map = {};
     entries.forEach((e) => {
-      dateById[e.id] = e.billing_date;
       if (!map[e.billing_date]) map[e.billing_date] = { total: 0, count: 0 };
+      map[e.billing_date].total += Number(e.amount);
       map[e.billing_date].count += 1;
     });
-    payments.forEach((p) => {
-      const date = dateById[p.billing_id];
-      if (date) map[date].total += Number(p.amount);
-    });
     return Object.entries(map).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [entries, payments]);
+  }, [entries]);
 
   return (
     <div>
