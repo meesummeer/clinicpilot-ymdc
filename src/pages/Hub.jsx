@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, fetchAllRows, fetchAllRowsByIds } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
 
 function formatPKR(n) {
@@ -58,7 +58,19 @@ export default function Hub({ profile }) {
       // PII. Querying billing/billing_payments directly here (even via an
       // embedded join) hits billing_select_staff, which blocks ceo and
       // silently zeroes out these totals for that role.
-      supabase.from('billing_analytics').select('*').gte('billing_date', dateFrom).lte('billing_date', dateTo),
+      //
+      // Paged with fetchAllRows: a busy month can have 1000+ matching
+      // rows, past PostgREST's default response cap — past that cap the
+      // plain query just silently truncates, with no error, which is what
+      // was previously undercounting Total Revenue/YMDC/Doctor-wise.
+      fetchAllRows(() =>
+        supabase
+          .from('billing_analytics')
+          .select('*')
+          .gte('billing_date', dateFrom)
+          .lte('billing_date', dateTo)
+          .order('id', { ascending: true })
+      ),
       supabase.from('doctor_costs').select('*').gte('cost_date', dateFrom).lte('cost_date', dateTo),
       supabase.from('expenses').select('*').gte('expense_date', dateFrom).lte('expense_date', dateTo),
     ]);
@@ -78,16 +90,16 @@ export default function Hub({ profile }) {
     // of via an embedded billing!inner(billing_date) join: an embed is
     // still subject to billing's own RLS (billing_select_staff), which
     // blocks ceo, while billing_payments queried directly is governed by
-    // its own policy.
+    // its own policy. Chunked with fetchAllRowsByIds — a full month's
+    // worth of billing IDs is long enough to 400 a single .in() request.
     const billingIds = (analyticsRows || []).map((r) => r.id);
-    console.log('DEBUG Hub billingIds', { count: billingIds.length, sample: billingIds.slice(0, 5) });
     if (billingIds.length > 0) {
-      const { data: paymentRows, error: paymentsError } = await supabase
-        .from('billing_payments')
-        .select('*')
-        .in('billing_id', billingIds);
+      const { data: paymentRows, error: paymentsError } = await fetchAllRowsByIds(
+        () => supabase.from('billing_payments').select('*').order('id', { ascending: true }),
+        'billing_id',
+        billingIds
+      );
       if (paymentsError) console.error(paymentsError.message);
-      console.log('DEBUG Hub billing_payments result', { count: (paymentRows || []).length, first: paymentRows?.[0] });
       setPayments(paymentRows || []);
     } else {
       setPayments([]);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, fetchAllRows } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
 
 function formatPKR(n) {
@@ -38,7 +38,18 @@ export default function DoctorRevenue({ profile }) {
       { data: analyticsRows, error: rowErr },
       { data: costRows, error: costErr },
     ] = await Promise.all([
-      supabase.from('billing_analytics').select('*').eq('doctor_id', doctorId).gte('billing_date', dateFrom).lte('billing_date', dateTo),
+      // Paged with fetchAllRows — the same table this doctor's billing
+      // rows live in can exceed PostgREST's default 1000-row response cap
+      // over a busy stretch, which silently truncates with no error.
+      fetchAllRows(() =>
+        supabase
+          .from('billing_analytics')
+          .select('*')
+          .eq('doctor_id', doctorId)
+          .gte('billing_date', dateFrom)
+          .lte('billing_date', dateTo)
+          .order('id', { ascending: true })
+      ),
       supabase.from('doctor_costs').select('*').eq('doctor_id', doctorId).gte('cost_date', dateFrom).lte('cost_date', dateTo),
     ]);
     if (rowErr) console.error(rowErr.message);

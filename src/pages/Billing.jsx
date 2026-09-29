@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, fetchAllRows } from '../lib/supabaseClient';
 import BillingForm from '../components/BillingForm';
 import InvoiceView from '../components/InvoiceView';
 import DailyReportView from '../components/DailyReportView';
@@ -38,28 +38,38 @@ export default function Billing({ profile, userEmail }) {
   const loadEntries = useCallback(async () => {
     setLoading(true);
 
-    let billingQuery = supabase
-      .from('billing')
-      .select('*, doctors(name, color_hex)')
-      .gte('billing_date', dateFrom)
-      .lte('billing_date', dateTo)
-      .order('billing_date', { ascending: false });
-    if (filterDoctor !== 'all') billingQuery = billingQuery.eq('doctor_id', filterDoctor);
-
-    // Filter billing_payments server-side via a join on the date range
-    // (and doctor, when set) instead of fetching billing IDs first and
-    // passing them as a giant .in() list — that list gets long enough with
-    // a wide date range to exceed the URL length limit and 400 the request.
-    let paymentsQuery = supabase
-      .from('billing_payments')
-      .select('*, billing!inner(billing_date, doctor_id)')
-      .gte('billing.billing_date', dateFrom)
-      .lte('billing.billing_date', dateTo);
-    if (filterDoctor !== 'all') paymentsQuery = paymentsQuery.eq('billing.doctor_id', filterDoctor);
-
+    // Both queries below use fetchAllRows to page past PostgREST's default
+    // 1000-row cap — a busy month easily exceeds that, and past it the
+    // plain query silently truncates with no error (that's what caused
+    // Method showing "—" for most rows and the payment-method tiles being
+    // wildly undercounted). billing_date ties get id as a secondary sort
+    // so .range() pagination has a fully deterministic order to page over.
     const [{ data, error }, { data: paymentRows, error: paymentsError }] = await Promise.all([
-      billingQuery,
-      paymentsQuery,
+      fetchAllRows(() => {
+        let q = supabase
+          .from('billing')
+          .select('*, doctors(name, color_hex)')
+          .gte('billing_date', dateFrom)
+          .lte('billing_date', dateTo)
+          .order('billing_date', { ascending: false })
+          .order('id', { ascending: true });
+        if (filterDoctor !== 'all') q = q.eq('doctor_id', filterDoctor);
+        return q;
+      }),
+      // Filter billing_payments server-side via a join on the date range
+      // (and doctor, when set) instead of fetching billing IDs first and
+      // passing them as a giant .in() list — that list gets long enough with
+      // a wide date range to exceed the URL length limit and 400 the request.
+      fetchAllRows(() => {
+        let q = supabase
+          .from('billing_payments')
+          .select('*, billing!inner(billing_date, doctor_id)')
+          .gte('billing.billing_date', dateFrom)
+          .lte('billing.billing_date', dateTo)
+          .order('id', { ascending: true });
+        if (filterDoctor !== 'all') q = q.eq('billing.doctor_id', filterDoctor);
+        return q;
+      }),
     ]);
     if (error) console.error(error.message);
     if (paymentsError) console.error(paymentsError.message);
@@ -114,15 +124,6 @@ export default function Billing({ profile, userEmail }) {
     () => payments.filter((p) => p.payment_method === 'insurance').reduce((s, p) => s + Number(p.amount), 0),
     [payments]
   );
-  console.log('DEBUG insurance investigation', {
-    dateFrom,
-    dateTo,
-    filterDoctor,
-    totalPaymentsRows: payments.length,
-    distinctPaymentMethods: [...new Set(payments.map((p) => p.payment_method))],
-    insuranceRowCount: payments.filter((p) => p.payment_method === 'insurance').length,
-    insuranceRowSum: payments.filter((p) => p.payment_method === 'insurance').reduce((s, p) => s + Number(p.amount), 0),
-  });
 
   const reportEntries = useMemo(
     () => (reportDate ? entries.filter((e) => e.billing_date === reportDate) : []),
@@ -143,13 +144,6 @@ export default function Billing({ profile, userEmail }) {
     });
     return map;
   }, [payments]);
-  console.log('DEBUG paymentsByBillingId', {
-    paymentsLength: payments.length,
-    samplePayment: payments[0],
-    mapKeys: Object.keys(paymentsByBillingId),
-    entriesIds: entries.map((e) => e.id),
-    paymentsByBillingId,
-  });
 
   const allEntriesFiltered = useMemo(() => {
     let filtered = allEntriesDoctorFilter === 'all' ? entries : entries.filter((e) => e.doctor_id === allEntriesDoctorFilter);
