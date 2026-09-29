@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabaseClient';
 import BillingForm from '../components/BillingForm';
 import InvoiceView from '../components/InvoiceView';
 import DailyReportView from '../components/DailyReportView';
-import { formatDateDMY } from '../lib/formatters';
+import { formatDateDMY, paymentMethodKey, paymentMethodLabel } from '../lib/formatters';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
@@ -120,19 +120,28 @@ export default function Billing({ profile, userEmail }) {
     [reportDate, entries]
   );
 
-  // The Method column shows each entry's own payment_method (a combined
-  // label like "Cash + Card" for a split invoice), so the filter matches
-  // that same field exactly rather than checking whether any of the
-  // invoice's underlying billing_payments rows used the selected method —
-  // otherwise a filter can return rows whose displayed Method doesn't
-  // match what was selected.
+  // The real, authoritative payment method(s) for an invoice live only in
+  // its billing_payments rows, never in billing.payment_method — grouping
+  // them here lets both the Method column and this filter derive the same
+  // effective method (a single method, or "mixed" for a split invoice)
+  // from the same source, so the filter never returns a row whose
+  // displayed Method doesn't match what was selected.
+  const paymentsByBillingId = useMemo(() => {
+    const map = {};
+    payments.forEach((p) => {
+      if (!map[p.billing_id]) map[p.billing_id] = [];
+      map[p.billing_id].push(p);
+    });
+    return map;
+  }, [payments]);
+
   const allEntriesFiltered = useMemo(() => {
     let filtered = allEntriesDoctorFilter === 'all' ? entries : entries.filter((e) => e.doctor_id === allEntriesDoctorFilter);
     if (allEntriesMethodFilter !== 'all') {
-      filtered = filtered.filter((e) => e.payment_method === allEntriesMethodFilter);
+      filtered = filtered.filter((e) => paymentMethodKey(paymentsByBillingId[e.id]) === allEntriesMethodFilter);
     }
     return filtered;
-  }, [entries, allEntriesDoctorFilter, allEntriesMethodFilter]);
+  }, [entries, allEntriesDoctorFilter, allEntriesMethodFilter, paymentsByBillingId]);
 
   // Count and total both come from entries (the billing table) and its own
   // amount field — a single consistent source, rather than pairing entries
@@ -303,7 +312,7 @@ export default function Billing({ profile, userEmail }) {
                     {e.doctors?.name}
                   </td>
                   <td>{e.service || '—'}</td>
-                  <td style={{ textTransform: 'capitalize' }}>{e.payment_method?.replace('_', ' ')}</td>
+                  <td>{paymentMethodLabel(paymentsByBillingId[e.id])}</td>
                   <td>
                     {formatPKR(e.amount)}
                     {e.billed_amount && e.billed_amount > e.amount && (
@@ -350,7 +359,14 @@ export default function Billing({ profile, userEmail }) {
           }}
         />
       )}
-      {reportDate && <DailyReportView date={reportDate} entries={reportEntries} onClose={() => setReportDate(null)} />}
+      {reportDate && (
+        <DailyReportView
+          date={reportDate}
+          entries={reportEntries}
+          paymentsByBillingId={paymentsByBillingId}
+          onClose={() => setReportDate(null)}
+        />
+      )}
     </div>
   );
 }

@@ -61,3 +61,29 @@ export function doctorScheduleLabel(doctor) {
   const days = (doctor.working_days || []).map((d) => dayMap[d]);
   return `${days.join(', ')} · ${formatTime12h(doctor.start_time)} – ${formatTime12h(doctor.end_time)}`;
 }
+
+// ── Payment method display: "Mixed" for a split invoice ─────────────────
+// A billing entry's real payment method(s) live only in its billing_payments
+// rows (one row per portion). These derive the effective method purely from
+// those rows — never from billing.payment_method — so a split invoice
+// always displays as "Mixed" rather than any single method name, with no
+// "mixed"/"other" value ever written back to the database.
+export const PAYMENT_METHOD_LABELS = {
+  cash: 'Cash',
+  card: 'Card',
+  bank_transfer: 'Bank Transfer',
+  insurance: 'Insurance',
+};
+
+export function paymentMethodKey(paymentRows) {
+  if (!paymentRows || paymentRows.length === 0) return null;
+  const distinct = [...new Set(paymentRows.map((p) => p.payment_method))];
+  return distinct.length > 1 ? 'mixed' : distinct[0];
+}
+
+export function paymentMethodLabel(paymentRows) {
+  const key = paymentMethodKey(paymentRows);
+  if (!key) return '—';
+  if (key === 'mixed') return 'Mixed';
+  return PAYMENT_METHOD_LABELS[key] || key;
+}

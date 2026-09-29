@@ -34,6 +34,7 @@ export default function Hub({ profile }) {
 
   const [doctors, setDoctors] = useState([]);
   const [rows, setRows] = useState([]);
+  const [payments, setPayments] = useState([]);
   const [costs, setCosts] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +70,27 @@ export default function Hub({ profile }) {
     setRows(analyticsRows || []);
     setCosts(costRows || []);
     setExpenses(expenseRows || []);
+
+    // Payment-method totals need per-payment granularity — a split invoice
+    // must contribute to each of its real methods' totals — which
+    // billing_analytics can't give us (one row per invoice). Fetch
+    // billing_payments by the billing IDs already returned above instead
+    // of via an embedded billing!inner(billing_date) join: an embed is
+    // still subject to billing's own RLS (billing_select_staff), which
+    // blocks ceo, while billing_payments queried directly is governed by
+    // its own policy.
+    const billingIds = (analyticsRows || []).map((r) => r.id);
+    if (billingIds.length > 0) {
+      const { data: paymentRows, error: paymentsError } = await supabase
+        .from('billing_payments')
+        .select('*')
+        .in('billing_id', billingIds);
+      if (paymentsError) console.error(paymentsError.message);
+      setPayments(paymentRows || []);
+    } else {
+      setPayments([]);
+    }
+
     setLoading(false);
   }, [dateFrom, dateTo]);
 
@@ -181,13 +203,13 @@ export default function Hub({ profile }) {
   const profitLoss = ymdcRevenue - totalExpenses;
 
   const paymentBreakdown = useMemo(() => {
-    const cash = rows.filter((r) => r.payment_method === 'cash').reduce((s, r) => s + revenueFor(r), 0);
-    const bank = rows
-      .filter((r) => r.payment_method === 'card' || r.payment_method === 'bank_transfer')
-      .reduce((s, r) => s + revenueFor(r), 0);
-    const insurance = rows.filter((r) => r.payment_method === 'insurance').reduce((s, r) => s + revenueFor(r), 0);
+    const cash = payments.filter((p) => p.payment_method === 'cash').reduce((s, p) => s + Number(p.amount), 0);
+    const bank = payments
+      .filter((p) => p.payment_method === 'card' || p.payment_method === 'bank_transfer')
+      .reduce((s, p) => s + Number(p.amount), 0);
+    const insurance = payments.filter((p) => p.payment_method === 'insurance').reduce((s, p) => s + Number(p.amount), 0);
     return { cash, bank, insurance };
-  }, [rows]);
+  }, [payments]);
 
   const doctorWise = useMemo(() => {
     return doctors

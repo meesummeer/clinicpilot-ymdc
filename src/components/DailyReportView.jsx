@@ -1,11 +1,11 @@
 import { createPortal } from 'react-dom';
-import { formatDateDMY } from '../lib/formatters';
+import { formatDateDMY, paymentMethodLabel } from '../lib/formatters';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
 
-export default function DailyReportView({ date, entries, onClose }) {
+export default function DailyReportView({ date, entries, paymentsByBillingId, onClose }) {
   if (!date) return null;
 
   const printRoot = document.getElementById('invoice-print-root');
@@ -65,7 +65,7 @@ export default function DailyReportView({ date, entries, onClose }) {
                     <td>{e.patient_name}</td>
                     <td>{e.doctors?.name || '—'}</td>
                     <td>{e.service || '—'}</td>
-                    <td style={{ textTransform: 'capitalize' }}>{e.payment_method?.replace('_', ' ')}</td>
+                    <td>{paymentMethodLabel(paymentsByBillingId?.[e.id])}</td>
                     <td>{formatPKR(e.amount)}</td>
                     <td>{hasBalance ? formatPKR(e.billed_amount - e.amount) : '—'}</td>
                   </tr>

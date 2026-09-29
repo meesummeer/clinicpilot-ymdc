@@ -24,16 +24,6 @@ function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
 
-// Cash, Card, Bank Transfer, Insurance are the only four payment methods —
-// "Other" was fully migrated to Insurance in the database and is no longer
-// selectable anywhere.
-const PAYMENT_METHOD_LABELS = {
-  cash: 'Cash',
-  card: 'Card',
-  bank_transfer: 'Bank Transfer',
-  insurance: 'Insurance',
-};
-
 function emptyPayment() {
   return { payment_method: 'cash', amount: '' };
 }
@@ -219,20 +209,20 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
 
     setSaving(true);
     const totalAmount = validPayments.reduce((s, p) => s + p.amount, 0);
-    // A split entry's overall method is a readable combination of the
-    // distinct methods used (e.g. "Cash + Card") rather than a single
-    // "Other" bucket, since Other no longer exists as a payment method.
-    const overallPaymentMethod =
-      validPayments.length === 1
-        ? validPayments[0].payment_method
-        : [...new Set(validPayments.map((p) => PAYMENT_METHOD_LABELS[p.payment_method] || p.payment_method))].join(' + ');
 
     const payload = {
       ...form,
       patient_age: form.patient_age ? parseInt(form.patient_age, 10) : null,
       billed_amount: hasBalance && form.billed_amount ? parseFloat(form.billed_amount) : null,
       amount: totalAmount,
-      payment_method: overallPaymentMethod,
+      // billing.payment_method is a legacy single-value field with no
+      // reliable way to represent a split across methods — the real,
+      // authoritative per-portion methods live in billing_payments below,
+      // which is what every display and total now reads from. This just
+      // keeps the column populated with one real method (never a made-up
+      // "mixed"/"other" value), for anything outside this app that still
+      // queries billing directly.
+      payment_method: validPayments[0].payment_method,
     };
 
     const query = isEditing
