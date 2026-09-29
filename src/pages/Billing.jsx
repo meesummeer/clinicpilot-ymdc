@@ -114,6 +114,15 @@ export default function Billing({ profile, userEmail }) {
     () => payments.filter((p) => p.payment_method === 'insurance').reduce((s, p) => s + Number(p.amount), 0),
     [payments]
   );
+  console.log('DEBUG insurance investigation', {
+    dateFrom,
+    dateTo,
+    filterDoctor,
+    totalPaymentsRows: payments.length,
+    distinctPaymentMethods: [...new Set(payments.map((p) => p.payment_method))],
+    insuranceRowCount: payments.filter((p) => p.payment_method === 'insurance').length,
+    insuranceRowSum: payments.filter((p) => p.payment_method === 'insurance').reduce((s, p) => s + Number(p.amount), 0),
+  });
 
   const reportEntries = useMemo(
     () => (reportDate ? entries.filter((e) => e.billing_date === reportDate) : []),
@@ -134,6 +143,13 @@ export default function Billing({ profile, userEmail }) {
     });
     return map;
   }, [payments]);
+  console.log('DEBUG paymentsByBillingId', {
+    paymentsLength: payments.length,
+    samplePayment: payments[0],
+    mapKeys: Object.keys(paymentsByBillingId),
+    entriesIds: entries.map((e) => e.id),
+    paymentsByBillingId,
+  });
 
   const allEntriesFiltered = useMemo(() => {
     let filtered = allEntriesDoctorFilter === 'all' ? entries : entries.filter((e) => e.doctor_id === allEntriesDoctorFilter);

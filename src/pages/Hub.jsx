@@ -80,12 +80,14 @@ export default function Hub({ profile }) {
     // blocks ceo, while billing_payments queried directly is governed by
     // its own policy.
     const billingIds = (analyticsRows || []).map((r) => r.id);
+    console.log('DEBUG Hub billingIds', { count: billingIds.length, sample: billingIds.slice(0, 5) });
     if (billingIds.length > 0) {
       const { data: paymentRows, error: paymentsError } = await supabase
         .from('billing_payments')
         .select('*')
         .in('billing_id', billingIds);
       if (paymentsError) console.error(paymentsError.message);
+      console.log('DEBUG Hub billing_payments result', { count: (paymentRows || []).length, first: paymentRows?.[0] });
       setPayments(paymentRows || []);
     } else {
       setPayments([]);
