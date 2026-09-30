@@ -3,6 +3,7 @@ import { supabase, fetchAllRows } from '../lib/supabaseClient';
 import BillingForm from '../components/BillingForm';
 import InvoiceView from '../components/InvoiceView';
 import DailyReportView from '../components/DailyReportView';
+import BillingReportView from '../components/BillingReportView';
 import { formatDateDMY, paymentMethodKey, paymentMethodLabel } from '../lib/formatters';
 
 function formatPKR(n) {
@@ -20,6 +21,7 @@ export default function Billing({ profile, userEmail }) {
   const [reportDate, setReportDate] = useState(null);
   const [allEntriesDoctorFilter, setAllEntriesDoctorFilter] = useState('all');
   const [allEntriesMethodFilter, setAllEntriesMethodFilter] = useState('all');
+  const [showBillingReport, setShowBillingReport] = useState(false);
   const [payments, setPayments] = useState([]);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -296,6 +298,9 @@ export default function Billing({ profile, userEmail }) {
               <option value="insurance">Insurance</option>
             </select>
           </div>
+          <button className="btn-secondary" style={{ marginLeft: 'auto' }} onClick={() => setShowBillingReport(true)}>
+            Export as PDF
+          </button>
         </div>
         {loading ? (
           <p>Loading…</p>
@@ -375,6 +380,16 @@ export default function Billing({ profile, userEmail }) {
           entries={reportEntries}
           paymentsByBillingId={paymentsByBillingId}
           onClose={() => setReportDate(null)}
+        />
+      )}
+      {showBillingReport && (
+        <BillingReportView
+          doctorName={allEntriesDoctorFilter === 'all' ? 'All Doctors' : doctors.find((d) => d.id === allEntriesDoctorFilter)?.name}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          entries={allEntriesFiltered}
+          paymentsByBillingId={paymentsByBillingId}
+          onClose={() => setShowBillingReport(false)}
         />
       )}
     </div>
