@@ -2,10 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { supabase, fetchAllRows, fetchAllRowsByIds } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
+import FinancialReportView from '../components/FinancialReportView';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
+
+const EXPENSE_CATEGORY_LABELS = { general: 'General', utility: 'Utility Bills', salary: 'Salary' };
 
 const ARCHIVE_INCOME_CATEGORIES = ['Services', 'Dental', 'Consultation', 'X-Ray', 'Ultrasound', 'Orthotics'];
 const ARCHIVE_EXPENSE_CATEGORIES = [
@@ -42,6 +45,7 @@ export default function Hub({ profile }) {
   const [openCostFormFor, setOpenCostFormFor] = useState(null);
   const [costDraft, setCostDraft] = useState({ description: '', amount: '', cost_date: today });
   const [savingCost, setSavingCost] = useState(false);
+  const [showFinancialReport, setShowFinancialReport] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -238,6 +242,42 @@ export default function Hub({ profile }) {
       .sort((a, b) => b.total - a.total);
   }, [doctors, rows]);
 
+  // Financial report Income table: one row per real doctor (same
+  // gross/cost/YMDC-share numbers as the Doctor Revenue Calculator below),
+  // plus one row per service-category "doctor" (X-Ray, Ultrasound, etc.).
+  // Service-category rows have no cost/split applied here either — same as
+  // serviceCategoryRevenue above — so summing this table's YMDC's Share
+  // column always equals ymdcRevenue exactly.
+  const incomeRows = useMemo(() => {
+    const doctorRows = doctorFinancials.map((f) => ({
+      name: f.doctor.name,
+      gross: f.gross,
+      cost: f.totalCosts,
+      ymdcShare: f.ymdcShare,
+    }));
+    const serviceRows = doctorWise
+      .filter((dw) => dw.doctor.is_service_category)
+      .map((dw) => ({
+        name: dw.doctor.name,
+        gross: dw.total,
+        cost: 0,
+        ymdcShare: dw.total,
+      }));
+    return [...doctorRows, ...serviceRows];
+  }, [doctorFinancials, doctorWise]);
+
+  const expenseRows = useMemo(() => {
+    const map = {};
+    expenses.forEach((e) => {
+      map[e.category] = (map[e.category] || 0) + Number(e.amount);
+    });
+    return Object.entries(map).map(([category, amount]) => ({
+      category,
+      label: EXPENSE_CATEGORY_LABELS[category] || category,
+      amount,
+    }));
+  }, [expenses]);
+
   function openAddCost(doctorId) {
     setCostDraft({ description: '', amount: '', cost_date: today });
     setOpenCostFormFor(doctorId);
@@ -284,6 +324,9 @@ export default function Hub({ profile }) {
             <label>To</label>
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
+          <button className="btn-secondary" style={{ marginLeft: 'auto' }} onClick={() => setShowFinancialReport(true)}>
+            Generate Financial Report
+          </button>
         </div>
       </div>
 
@@ -542,6 +585,20 @@ export default function Hub({ profile }) {
           </>
         )}
       </div>
+
+      {showFinancialReport && (
+        <FinancialReportView
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          preparedBy={profile?.full_name || 'Admin'}
+          incomeRows={incomeRows}
+          totalIncome={ymdcRevenue}
+          expenseRows={expenseRows}
+          totalExpense={totalExpenses}
+          netIncome={profitLoss}
+          onClose={() => setShowFinancialReport(false)}
+        />
+      )}
     </div>
   );
 }
