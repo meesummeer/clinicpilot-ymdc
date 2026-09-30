@@ -238,21 +238,6 @@ export default function Hub({ profile }) {
       .sort((a, b) => b.total - a.total);
   }, [doctors, rows]);
 
-  const procedureChartData = useMemo(() => {
-    const map = {};
-    rows.forEach((r) => {
-      const key = r.service || 'Unspecified';
-      map[key] = (map[key] || 0) + revenueFor(r);
-    });
-    const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
-    const top = sorted.slice(0, 10);
-    const rest = sorted.slice(10);
-    const otherTotal = rest.reduce((s, [, v]) => s + v, 0);
-    const data = top.map(([name, value]) => ({ name, value }));
-    if (otherTotal > 0) data.push({ name: 'Other', value: otherTotal });
-    return data;
-  }, [rows]);
-
   function openAddCost(doctorId) {
     setCostDraft({ description: '', amount: '', cost_date: today });
     setOpenCostFormFor(doctorId);
@@ -326,18 +311,6 @@ export default function Hub({ profile }) {
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Cash vs Bank Account</h3>
-        <table className="data-table">
-          <thead><tr><th>Method</th><th>Total</th></tr></thead>
-          <tbody>
-            <tr><td>Cash</td><td>{formatPKR(paymentBreakdown.cash)}</td></tr>
-            <tr><td>Bank Account (Card + Bank Transfer)</td><td>{formatPKR(paymentBreakdown.bank)}</td></tr>
-            <tr><td>Insurance</td><td>{formatPKR(paymentBreakdown.insurance)}</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div className="card">
         <h3 style={{ marginTop: 0 }}>Doctor-wise Revenue</h3>
         {doctorWise.length === 0 ? (
           <div className="empty-state">No doctors set up.</div>
@@ -358,22 +331,15 @@ export default function Hub({ profile }) {
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Top Procedures / Services</h3>
-        {procedureChartData.length === 0 ? (
-          <div className="empty-state">No data for this range.</div>
-        ) : (
-          <div style={{ width: '100%', height: Math.max(280, procedureChartData.length * 38) }}>
-            <ResponsiveContainer>
-              <BarChart data={procedureChartData} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" tickFormatter={(v) => formatPKR(v)} tick={{ fontSize: 11 }} />
-                <YAxis type="category" dataKey="name" width={170} tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(v) => formatPKR(v)} />
-                <Bar dataKey="value" fill="#1A0A6E" radius={[0, 6, 6, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+        <h3 style={{ marginTop: 0 }}>Cash vs Bank Account</h3>
+        <table className="data-table">
+          <thead><tr><th>Method</th><th>Total</th></tr></thead>
+          <tbody>
+            <tr><td>Cash</td><td>{formatPKR(paymentBreakdown.cash)}</td></tr>
+            <tr><td>Bank Account (Card + Bank Transfer)</td><td>{formatPKR(paymentBreakdown.bank)}</td></tr>
+            <tr><td>Insurance</td><td>{formatPKR(paymentBreakdown.insurance)}</td></tr>
+          </tbody>
+        </table>
       </div>
 
       <div className="card">
