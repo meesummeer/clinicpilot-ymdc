@@ -20,6 +20,12 @@ function autoServiceFor(doctorName) {
   return label ? `Consultation - ${label}` : null;
 }
 
+// Doctors whose Service field is locked to a single fixed value — no
+// other service can be selected or typed for them.
+const LOCKED_SERVICE_DOCTORS = {
+  'Sultan Zeb': 'Orthotics',
+};
+
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
@@ -31,12 +37,13 @@ function emptyPayment() {
 export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCancel, profileId, entry }) {
   const isEditing = !!entry;
   const initialDoctorId = entry?.doctor_id || doctors[0]?.id || '';
+  const initialDoctorName = doctors.find((d) => d.id === initialDoctorId)?.name;
   const [form, setForm] = useState({
     patient_name: entry?.patient_name || '',
     patient_phone: entry?.patient_phone || '',
     patient_age: entry?.patient_age ?? '',
     doctor_id: initialDoctorId,
-    service: entry?.service || '',
+    service: LOCKED_SERVICE_DOCTORS[initialDoctorName] || entry?.service || '',
     billed_amount: entry?.billed_amount ?? '',
     billing_date: entry?.billing_date || new Date().toISOString().slice(0, 10),
     notes: entry?.notes || '',
@@ -131,7 +138,6 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
 
   // Tracks the last value we auto-filled into Service, so a doctor change
   // only overwrites it if the user hasn't customized it since.
-  const initialDoctorName = doctors.find((d) => d.id === initialDoctorId)?.name;
   const initialAutoService = autoServiceFor(initialDoctorName);
   const lastAutoFillRef = useRef(
     entry?.service && entry.service === initialAutoService ? initialAutoService : null
@@ -184,6 +190,11 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
 
   function handleDoctorChange(doctorId) {
     const doctorName = doctors.find((d) => d.id === doctorId)?.name;
+    const lockedService = LOCKED_SERVICE_DOCTORS[doctorName];
+    if (lockedService) {
+      setForm((f) => ({ ...f, doctor_id: doctorId, service: lockedService }));
+      return;
+    }
     const autoService = autoServiceFor(doctorName);
     setForm((f) => {
       if (autoService && (f.service === '' || f.service === lastAutoFillRef.current)) {
@@ -267,6 +278,8 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
       onSaved();
     }
   }
+
+  const isServiceLocked = !!LOCKED_SERVICE_DOCTORS[doctors.find((d) => d.id === form.doctor_id)?.name];
 
   return (
     <form className="card" onSubmit={handleSubmit} style={{ borderTop: '4px solid var(--gold)' }}>
@@ -353,6 +366,7 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
             placeholder="e.g. Consultation Charges"
             value={form.service}
             onChange={(e) => update('service', e.target.value)}
+            disabled={isServiceLocked}
           />
         </div>
         <div className="filter-field">
