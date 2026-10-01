@@ -104,40 +104,22 @@ export default function Billing({ profile, userEmail }) {
     loadEntries();
   }
 
-  // Revenue totals are computed from billing_payments (not billing.amount)
-  // so a single invoice split across multiple methods (e.g. part cash, part
-  // insurance) contributes the right amount to each bucket below.
+  // Total Billed always counts every billing row once, from billing.amount
+  // — same source the PDF export already uses — so an invoice is never
+  // silently dropped just because it has no billing_payments rows (that's
+  // exactly what happened to 26-10163: zero payment rows meant it
+  // contributed nothing to any tile even though the row itself was fine).
   const totalAmount = useMemo(
-    () => payments.reduce((s, p) => s + Number(p.amount), 0),
-    [payments]
-  );
-
-  const cashTotal = useMemo(
-    () => payments.filter((p) => p.payment_method === 'cash').reduce((s, p) => s + Number(p.amount), 0),
-    [payments]
-  );
-
-  const bankTotal = useMemo(
-    () => payments.filter((p) => p.payment_method === 'card' || p.payment_method === 'bank_transfer').reduce((s, p) => s + Number(p.amount), 0),
-    [payments]
-  );
-
-  const insuranceTotal = useMemo(
-    () => payments.filter((p) => p.payment_method === 'insurance').reduce((s, p) => s + Number(p.amount), 0),
-    [payments]
-  );
-
-  const reportEntries = useMemo(
-    () => (reportDate ? entries.filter((e) => e.billing_date === reportDate) : []),
-    [reportDate, entries]
+    () => entries.reduce((s, e) => s + Number(e.amount), 0),
+    [entries]
   );
 
   // The real, authoritative payment method(s) for an invoice live only in
   // its billing_payments rows, never in billing.payment_method — grouping
-  // them here lets both the Method column and this filter derive the same
-  // effective method (a single method, or "mixed" for a split invoice)
-  // from the same source, so the filter never returns a row whose
-  // displayed Method doesn't match what was selected.
+  // them here lets the Method column, the filter, and the tiles below all
+  // derive the same effective method (a single method, or "mixed" for a
+  // split invoice) from the same source, so the filter never returns a
+  // row whose displayed Method doesn't match what was selected.
   const paymentsByBillingId = useMemo(() => {
     const map = {};
     payments.forEach((p) => {
@@ -146,6 +128,37 @@ export default function Billing({ profile, userEmail }) {
     });
     return map;
   }, [payments]);
+
+  // Cash/Bank/Insurance split each invoice across its real billing_payments
+  // rows when it has any (so a split invoice still attributes correctly to
+  // each method it actually used) — but billing_payments only supplements
+  // that breakdown, it never gates inclusion: an invoice with zero payment
+  // rows still counts in full, under its own billing.payment_method.
+  const paymentBreakdown = useMemo(() => {
+    const totals = { cash: 0, bank: 0, insurance: 0 };
+    function addTo(method, amount) {
+      if (method === 'cash') totals.cash += amount;
+      else if (method === 'card' || method === 'bank_transfer') totals.bank += amount;
+      else if (method === 'insurance') totals.insurance += amount;
+    }
+    entries.forEach((e) => {
+      const entryPayments = paymentsByBillingId[e.id];
+      if (entryPayments && entryPayments.length > 0) {
+        entryPayments.forEach((p) => addTo(p.payment_method, Number(p.amount)));
+      } else {
+        addTo(e.payment_method, Number(e.amount));
+      }
+    });
+    return totals;
+  }, [entries, paymentsByBillingId]);
+  const cashTotal = paymentBreakdown.cash;
+  const bankTotal = paymentBreakdown.bank;
+  const insuranceTotal = paymentBreakdown.insurance;
+
+  const reportEntries = useMemo(
+    () => (reportDate ? entries.filter((e) => e.billing_date === reportDate) : []),
+    [reportDate, entries]
+  );
 
   const allEntriesFiltered = useMemo(() => {
     let filtered = allEntriesDoctorFilter === 'all' ? entries : entries.filter((e) => e.doctor_id === allEntriesDoctorFilter);

@@ -254,7 +254,21 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
     const { error: paymentsError } = await supabase
       .from('billing_payments')
       .insert(validPayments.map((p) => ({ billing_id: data.id, payment_method: p.payment_method, amount: p.amount })));
-    if (paymentsError) console.error(paymentsError.message);
+    if (paymentsError) {
+      // A billing row with zero billing_payments rows is exactly how an
+      // invoice silently disappeared from Billing's summary tiles before —
+      // this used to just console.error and carry on as if the save had
+      // fully succeeded. For a brand-new entry, roll back the billing row
+      // we just created so a failed save doesn't leave an orphaned invoice
+      // behind; for an edit, the row predates this save, so it's left in
+      // place and the error is surfaced instead of deleting existing data.
+      if (!isEditing) {
+        await supabase.from('billing').delete().eq('id', data.id);
+      }
+      setSaving(false);
+      setError(`Could not save payment details: ${paymentsError.message}. Please try again.`);
+      return;
+    }
 
     const phone = form.patient_phone.trim();
     if (phone) {
