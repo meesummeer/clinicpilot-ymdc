@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { supabase, fetchAllRows, fetchAllRowsByIds } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
+import { splitRevenue } from '../lib/revenueSplit';
 import FinancialReportView from '../components/FinancialReportView';
 
 function formatPKR(n) {
@@ -179,65 +180,52 @@ export default function Hub({ profile }) {
 
   const totalRevenue = useMemo(() => rows.reduce((s, r) => s + revenueFor(r), 0), [rows]);
 
-  const serviceCategoryRevenue = useMemo(
-    () => rows.filter((r) => r.is_service_category).reduce((s, r) => s + revenueFor(r), 0),
-    [rows]
-  );
-
   const doctorFinancials = useMemo(() => {
     return doctors
       .filter((d) => !d.is_service_category)
       .map((d) => {
         const doctorRows = rows.filter((r) => r.doctor_id === d.id);
-        const gross = doctorRows.reduce((s, r) => s + revenueFor(r), 0);
         const costsList = costs
           .filter((c) => c.doctor_id === d.id)
           .sort((a, b) => (a.cost_date < b.cost_date ? 1 : -1));
         const totalCosts = costsList.reduce((s, c) => s + Number(c.amount), 0);
-        const net = gross - totalCosts;
-
-        // Per-invoice split: each row uses its own split_percentage_override
-        // (e.g. a Hijama 50/50 invoice) when set, else the doctor's base
-        // split_percentage — applied to that row's own gross and summed,
-        // so a doctor with a mix of Hijama and normal invoices splits
-        // correctly instead of one flat percentage applied to the total.
-        // Costs aren't invoice-level data, so they're allocated between
-        // the two sides in proportion to each side's share of gross — an
-        // exact generalization of the old net * splitPct formula that
-        // reduces to it precisely when every row shares one percentage.
-        let ymdcShareOfGross = 0;
-        let doctorShareOfGross = 0;
-        doctorRows.forEach((r) => {
-          const pct = r.split_percentage_override != null ? Number(r.split_percentage_override) : Number(d.split_percentage);
-          const rowGross = revenueFor(r);
-          ymdcShareOfGross += rowGross * (pct / 100);
-          doctorShareOfGross += rowGross * ((100 - pct) / 100);
-        });
-        let ymdcShare, doctorShare, effectiveSplitPct;
-        if (gross > 0) {
-          ymdcShare = ymdcShareOfGross - totalCosts * (ymdcShareOfGross / gross);
-          doctorShare = doctorShareOfGross - totalCosts * (doctorShareOfGross / gross);
-          effectiveSplitPct = (ymdcShareOfGross / gross) * 100;
-        } else {
-          const basePct = Number(d.split_percentage);
-          ymdcShare = net * (basePct / 100);
-          doctorShare = net * ((100 - basePct) / 100);
-          effectiveSplitPct = basePct;
-        }
+        const split = splitRevenue(doctorRows, d.split_percentage, totalCosts);
 
         return {
           doctor: d,
           transactionCount: doctorRows.length,
-          gross,
+          gross: split.gross,
           costsList,
           totalCosts,
-          net,
-          doctorShare,
-          ymdcShare,
-          effectiveSplitPct,
+          net: split.net,
+          doctorShare: split.entityShare,
+          ymdcShare: split.centreShare,
+          effectiveSplitPct: split.effectiveSplitPct,
         };
       });
   }, [doctors, rows, costs]);
+
+  // Service-category "doctors" (X-Ray, Ultrasound, etc.) split the exact
+  // same way as real doctors — using their own doctors.split_percentage,
+  // never a hardcoded 100%-centre assumption. A category intentionally at
+  // 100% (Vitals Checkup, Bandage Dressing, ...) still nets out to its
+  // full gross as centre share here, just because its split_percentage
+  // really is 100, not because this code forces it. Costs aren't tracked
+  // per service category in the UI, so this passes 0.
+  const serviceCategoryFinancials = useMemo(() => {
+    return doctors
+      .filter((d) => d.is_service_category)
+      .map((d) => {
+        const doctorRows = rows.filter((r) => r.doctor_id === d.id);
+        const split = splitRevenue(doctorRows, d.split_percentage, 0);
+        return { doctor: d, gross: split.gross, ymdcShare: split.centreShare };
+      });
+  }, [doctors, rows]);
+
+  const serviceCategoryRevenue = useMemo(
+    () => serviceCategoryFinancials.reduce((s, f) => s + f.ymdcShare, 0),
+    [serviceCategoryFinancials]
+  );
 
   const ymdcRevenue = useMemo(
     () => doctorFinancials.reduce((s, f) => s + f.ymdcShare, 0) + serviceCategoryRevenue,
@@ -272,10 +260,9 @@ export default function Hub({ profile }) {
 
   // Financial report Income table: one row per real doctor (same
   // gross/cost/YMDC-share numbers as the Doctor Revenue Calculator below),
-  // plus one row per service-category "doctor" (X-Ray, Ultrasound, etc.).
-  // Service-category rows have no cost/split applied here either — same as
-  // serviceCategoryRevenue above — so summing this table's YMDC's Share
-  // column always equals ymdcRevenue exactly.
+  // plus one row per service-category "doctor" (X-Ray, Ultrasound, etc.),
+  // split by their own split_percentage the same way — so summing this
+  // table's YMDC's Share column always equals ymdcRevenue exactly.
   const incomeRows = useMemo(() => {
     const doctorRows = doctorFinancials.map((f) => ({
       name: f.doctor.name,
@@ -283,16 +270,14 @@ export default function Hub({ profile }) {
       cost: f.totalCosts,
       ymdcShare: f.ymdcShare,
     }));
-    const serviceRows = doctorWise
-      .filter((dw) => dw.doctor.is_service_category)
-      .map((dw) => ({
-        name: dw.doctor.name,
-        gross: dw.total,
-        cost: 0,
-        ymdcShare: dw.total,
-      }));
+    const serviceRows = serviceCategoryFinancials.map((f) => ({
+      name: f.doctor.name,
+      gross: f.gross,
+      cost: 0,
+      ymdcShare: f.ymdcShare,
+    }));
     return [...doctorRows, ...serviceRows];
-  }, [doctorFinancials, doctorWise]);
+  }, [doctorFinancials, serviceCategoryFinancials]);
 
   const expenseRows = useMemo(() => {
     const map = {};
