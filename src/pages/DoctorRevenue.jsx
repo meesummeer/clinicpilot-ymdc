@@ -66,9 +66,39 @@ export default function DoctorRevenue({ profile }) {
   const gross = useMemo(() => rows.reduce((s, r) => s + Number(r.amount), 0), [rows]);
   const totalCosts = useMemo(() => costs.reduce((s, c) => s + Number(c.amount), 0), [costs]);
   const net = gross - totalCosts;
-  const splitPct = Number(doctor?.split_percentage ?? 30);
-  const yourShare = net * ((100 - splitPct) / 100);
-  const ymdcShare = net * (splitPct / 100);
+
+  // Per-invoice split: each row uses its own split_percentage_override
+  // (e.g. a Hijama 50/50 invoice) when set, else the doctor's base
+  // split_percentage — applied to that row's own gross and summed, so a
+  // mix of Hijama and normal invoices splits correctly instead of one
+  // flat percentage applied to the total. Costs aren't invoice-level
+  // data, so they're allocated between the two sides in proportion to
+  // each side's share of gross — an exact generalization of the old
+  // net * splitPct formula that reduces to it precisely when every row
+  // shares one percentage, matching the same calculation Hub uses.
+  const { yourShare, ymdcShare, splitPct } = useMemo(() => {
+    const basePct = Number(doctor?.split_percentage ?? 30);
+    let ymdcShareOfGross = 0;
+    let doctorShareOfGross = 0;
+    rows.forEach((r) => {
+      const pct = r.split_percentage_override != null ? Number(r.split_percentage_override) : basePct;
+      const rowGross = Number(r.amount);
+      ymdcShareOfGross += rowGross * (pct / 100);
+      doctorShareOfGross += rowGross * ((100 - pct) / 100);
+    });
+    if (gross > 0) {
+      return {
+        yourShare: doctorShareOfGross - totalCosts * (doctorShareOfGross / gross),
+        ymdcShare: ymdcShareOfGross - totalCosts * (ymdcShareOfGross / gross),
+        splitPct: (ymdcShareOfGross / gross) * 100,
+      };
+    }
+    return {
+      yourShare: net * ((100 - basePct) / 100),
+      ymdcShare: net * (basePct / 100),
+      splitPct: basePct,
+    };
+  }, [rows, doctor, gross, totalCosts, net]);
 
   if (!doctorId) {
     return (

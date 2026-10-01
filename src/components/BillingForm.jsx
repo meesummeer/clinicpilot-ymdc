@@ -26,6 +26,10 @@ const LOCKED_SERVICE_DOCTORS = {
   'Sultan Zeb': 'Orthotics',
 };
 
+// Doctors who can bill a session as "Hijama" at a 50/50 split instead of
+// their normal split_percentage — recorded per invoice, not per doctor.
+const HIJAMA_ELIGIBLE_DOCTORS = ['Dr. Rashid Ali', 'Dr. Hafiza Sundas'];
+
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
@@ -44,6 +48,7 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
     patient_age: entry?.patient_age ?? '',
     doctor_id: initialDoctorId,
     service: LOCKED_SERVICE_DOCTORS[initialDoctorName] || entry?.service || '',
+    split_percentage_override: entry?.split_percentage_override ?? null,
     billed_amount: entry?.billed_amount ?? '',
     billing_date: entry?.billing_date || new Date().toISOString().slice(0, 10),
     notes: entry?.notes || '',
@@ -190,18 +195,22 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
 
   function handleDoctorChange(doctorId) {
     const doctorName = doctors.find((d) => d.id === doctorId)?.name;
+    // The Hijama override is specific to whichever doctor it was checked
+    // for — always reset it on a doctor change rather than letting it
+    // silently carry over to a different doctor (including switching
+    // between two Hijama-eligible doctors).
     const lockedService = LOCKED_SERVICE_DOCTORS[doctorName];
     if (lockedService) {
-      setForm((f) => ({ ...f, doctor_id: doctorId, service: lockedService }));
+      setForm((f) => ({ ...f, doctor_id: doctorId, service: lockedService, split_percentage_override: null }));
       return;
     }
     const autoService = autoServiceFor(doctorName);
     setForm((f) => {
       if (autoService && (f.service === '' || f.service === lastAutoFillRef.current)) {
         lastAutoFillRef.current = autoService;
-        return { ...f, doctor_id: doctorId, service: autoService };
+        return { ...f, doctor_id: doctorId, service: autoService, split_percentage_override: null };
       }
-      return { ...f, doctor_id: doctorId };
+      return { ...f, doctor_id: doctorId, split_percentage_override: null };
     });
   }
 
@@ -294,6 +303,7 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
   }
 
   const isServiceLocked = !!LOCKED_SERVICE_DOCTORS[doctors.find((d) => d.id === form.doctor_id)?.name];
+  const isHijamaEligible = HIJAMA_ELIGIBLE_DOCTORS.includes(doctors.find((d) => d.id === form.doctor_id)?.name);
 
   return (
     <form className="card" onSubmit={handleSubmit} style={{ borderTop: '4px solid var(--gold)' }}>
@@ -372,6 +382,19 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
             ))}
           </select>
         </div>
+        {isHijamaEligible && (
+          <div className="filter-field">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                style={{ width: 'auto' }}
+                checked={form.split_percentage_override === 50}
+                onChange={(e) => update('split_percentage_override', e.target.checked ? 50 : null)}
+              />
+              Hijama (50/50 split)
+            </label>
+          </div>
+        )}
       </div>
       <div className="filters-row">
         <div className="filter-field">

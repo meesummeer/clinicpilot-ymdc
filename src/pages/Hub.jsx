@@ -195,9 +195,36 @@ export default function Hub({ profile }) {
           .sort((a, b) => (a.cost_date < b.cost_date ? 1 : -1));
         const totalCosts = costsList.reduce((s, c) => s + Number(c.amount), 0);
         const net = gross - totalCosts;
-        const splitPct = Number(d.split_percentage);
-        const ymdcShare = net * (splitPct / 100);
-        const doctorShare = net * ((100 - splitPct) / 100);
+
+        // Per-invoice split: each row uses its own split_percentage_override
+        // (e.g. a Hijama 50/50 invoice) when set, else the doctor's base
+        // split_percentage — applied to that row's own gross and summed,
+        // so a doctor with a mix of Hijama and normal invoices splits
+        // correctly instead of one flat percentage applied to the total.
+        // Costs aren't invoice-level data, so they're allocated between
+        // the two sides in proportion to each side's share of gross — an
+        // exact generalization of the old net * splitPct formula that
+        // reduces to it precisely when every row shares one percentage.
+        let ymdcShareOfGross = 0;
+        let doctorShareOfGross = 0;
+        doctorRows.forEach((r) => {
+          const pct = r.split_percentage_override != null ? Number(r.split_percentage_override) : Number(d.split_percentage);
+          const rowGross = revenueFor(r);
+          ymdcShareOfGross += rowGross * (pct / 100);
+          doctorShareOfGross += rowGross * ((100 - pct) / 100);
+        });
+        let ymdcShare, doctorShare, effectiveSplitPct;
+        if (gross > 0) {
+          ymdcShare = ymdcShareOfGross - totalCosts * (ymdcShareOfGross / gross);
+          doctorShare = doctorShareOfGross - totalCosts * (doctorShareOfGross / gross);
+          effectiveSplitPct = (ymdcShareOfGross / gross) * 100;
+        } else {
+          const basePct = Number(d.split_percentage);
+          ymdcShare = net * (basePct / 100);
+          doctorShare = net * ((100 - basePct) / 100);
+          effectiveSplitPct = basePct;
+        }
+
         return {
           doctor: d,
           transactionCount: doctorRows.length,
@@ -207,6 +234,7 @@ export default function Hub({ profile }) {
           net,
           doctorShare,
           ymdcShare,
+          effectiveSplitPct,
         };
       });
   }, [doctors, rows, costs]);
@@ -486,11 +514,11 @@ export default function Hub({ profile }) {
 
               <div className="hub-split-blocks">
                 <div className="hub-split-block">
-                  <div className="label">Doctor's Share ({(100 - Number(f.doctor.split_percentage)).toFixed(0)}%)</div>
+                  <div className="label">Doctor's Share ({(100 - f.effectiveSplitPct).toFixed(0)}%)</div>
                   <div className="value">{formatPKR(f.doctorShare)}</div>
                 </div>
                 <div className="hub-split-block hub-split-block-gold">
-                  <div className="label">YMDC's Share ({Number(f.doctor.split_percentage).toFixed(0)}%)</div>
+                  <div className="label">YMDC's Share ({f.effectiveSplitPct.toFixed(0)}%)</div>
                   <div className="value">{formatPKR(f.ymdcShare)}</div>
                 </div>
               </div>
