@@ -59,6 +59,7 @@ export default function App() {
   const isAdmin = profile.role === 'admin';
   const isDoctor = profile.role === 'doctor';
   const hasExpensesAccess = profile.has_expenses_access === true;
+  const hasHubAccess = profile.has_hub_access === true;
 
   const linkClass = ({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '');
   const closeNav = () => setMobileNavOpen(false);
@@ -74,7 +75,7 @@ export default function App() {
 
         {!isCeo && !isDoctor && (
           <nav className="sidebar-nav">
-            {isAdmin && (
+            {(isAdmin || hasHubAccess) && (
               <NavLink to="/hub" className={linkClass} onClick={closeNav}>
                 <span className="icon-dot" /> Hub
               </NavLink>
@@ -176,7 +177,7 @@ export default function App() {
                 <Route path="/patients" element={<Patients userEmail={session.user.email} />} />
                 {hasExpensesAccess && <Route path="/expenses" element={<Expenses profile={profile} />} />}
                 {isAdmin && <Route path="/doctors" element={<ManageDoctors />} />}
-                {isAdmin && <Route path="/hub" element={<Hub profile={profile} />} />}
+                {(isAdmin || hasHubAccess) && <Route path="/hub" element={<Hub profile={profile} />} />}
                 <Route path="*" element={<Navigate to="/today" replace />} />
               </>
             )}
