@@ -1,19 +1,19 @@
-import { PAYMENT_METHOD_LABELS } from './formatters';
+import { PAYMENT_METHODS, paymentMethodLabel, isInsuranceMethod } from '../constants/paymentMethods';
 
-// The Payment Method filter's options: exactly the real payment_method values
-// BillingForm writes to billing_payments (cash, card, bank_transfer,
-// insurance), with the same labels used everywhere else — no invented ones.
-export const METHOD_FILTER_OPTIONS = Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => ({
-  value,
-  label,
-}));
+// The Payment Method filter's options: every method in the central constant,
+// with the same labels used everywhere else.
+export const METHOD_FILTER_OPTIONS = PAYMENT_METHODS.map(({ value, label }) => ({ value, label }));
 
-// How the summary tiles group methods: Bank Account = card + bank_transfer.
+// How the summary figures group methods: Bank Account = card + bank_transfer;
+// each insurer (GIA International, Habib Insurance) gets its own bucket named
+// after its method value; everything else — including 'other' and any value
+// this code doesn't recognise — lands in 'other', so the buckets always add up
+// to the total instead of silently losing money.
 export function methodBucket(method) {
   if (method === 'cash') return 'cash';
   if (method === 'card' || method === 'bank_transfer') return 'bank';
-  if (method === 'insurance') return 'insurance';
-  return null;
+  if (isInsuranceMethod(method)) return method;
+  return 'other';
 }
 
 // An invoice's "legs": its billing_payments rows (one per method used) are the
@@ -30,9 +30,7 @@ export function legsFor(entry, entryPayments) {
 function methodLabelOf(legs) {
   const distinct = [...new Set(legs.map((l) => l.method))];
   if (distinct.length > 1) return 'Mixed';
-  const method = distinct[0];
-  if (!method) return '—';
-  return PAYMENT_METHOD_LABELS[method] || method;
+  return paymentMethodLabel(distinct[0]);
 }
 
 // Applies the Payment Method filter ('all' or a method value) over invoices that
@@ -46,7 +44,7 @@ function methodLabelOf(legs) {
 //   methodLabel   what the Method column/PDF shows
 // With a filter active, an invoice is kept only if at least one leg matches, and
 // a split invoice therefore appears under each of its methods with just that
-// method's portion.
+// method's portion. (A zero-amount invoice still matches its leg's method.)
 export function buildVisibleRows(entries, paymentsByBillingId, method) {
   const rows = [];
   entries.forEach((entry) => {
@@ -66,7 +64,11 @@ export function buildVisibleRows(entries, paymentsByBillingId, method) {
       return;
     }
 
-    const matchedLegs = legs.filter((l) => l.method === method);
+    // "Other" matches whatever the tiles file under Other (the 'other' value
+    // plus anything unrecognised), so the filter and its tile never disagree
+    // and the filters always add up to the unfiltered total.
+    const matches = method === 'other' ? (l) => methodBucket(l.method) === 'other' : (l) => l.method === method;
+    const matchedLegs = legs.filter(matches);
     if (matchedLegs.length === 0) return;
     rows.push({
       entry,
@@ -75,22 +77,22 @@ export function buildVisibleRows(entries, paymentsByBillingId, method) {
       legs,
       matchedLegs,
       partial: matchedLegs.length < legs.length,
-      methodLabel: PAYMENT_METHOD_LABELS[method] || method,
+      methodLabel: paymentMethodLabel(method),
     });
   });
   return rows;
 }
 
-// Tile figures for a set of visible rows. Total Billed is the sum of the rows'
-// shown amounts; Cash/Bank/Insurance bucket the matched legs, so with a method
-// filter active every tile reflects only the filtered data.
+// Figures for a set of visible rows. `total` is the sum of the rows' shown
+// amounts; the rest bucket the matched legs (see methodBucket), so with a
+// method filter active every figure reflects only the filtered data, and
+// cash + bank + gia_international + habib_insurance + other = total.
 export function summarizeRows(rows) {
-  const totals = { total: 0, cash: 0, bank: 0, insurance: 0 };
+  const totals = { total: 0, cash: 0, bank: 0, gia_international: 0, habib_insurance: 0, other: 0 };
   rows.forEach((r) => {
     totals.total += r.amount;
     r.matchedLegs.forEach((l) => {
-      const bucket = methodBucket(l.method);
-      if (bucket) totals[bucket] += l.amount;
+      totals[methodBucket(l.method)] += l.amount;
     });
   });
   return totals;

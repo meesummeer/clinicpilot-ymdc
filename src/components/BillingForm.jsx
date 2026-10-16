@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { SELECTABLE_PAYMENT_METHODS, paymentMethodLabel } from '../constants/paymentMethods';
 
 // Doctor name -> service label used to auto-fill "Consultation - {label}".
 // Doctors not listed here are left out of auto-fill entirely.
@@ -426,10 +427,16 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
             <div className="filter-field">
               <label>Method</label>
               <select value={p.payment_method} onChange={(e) => updatePayment(i, 'payment_method', e.target.value)}>
-                <option value="cash">Cash</option>
-                <option value="card">Card</option>
-                <option value="bank_transfer">Bank Transfer</option>
-                <option value="insurance">Insurance</option>
+                {SELECTABLE_PAYMENT_METHODS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+                {/* A loaded leg can carry a legacy or unrecognised value (e.g.
+                    an old 'other' payment). Keep it as an option so editing
+                    shows what's really stored instead of silently displaying
+                    the first option while still holding the old value. */}
+                {!SELECTABLE_PAYMENT_METHODS.some((m) => m.value === p.payment_method) && (
+                  <option value={p.payment_method}>{paymentMethodLabel(p.payment_method)}</option>
+                )}
               </select>
             </div>
             <div className="filter-field">

@@ -354,6 +354,13 @@ table.data-table tbody tr:hover td { background: #F9F9FD; }
 .summary-tile .label { font-size: 11px; color: var(--grey-text); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
 .summary-tile .value { font-size: 28px; font-weight: 800; color: var(--navy); margin-top: 6px; letter-spacing: -0.5px; }
 
+/* Tile rows with five or more tiles (Billing): pack as many per row as fit and
+   scale each figure to its own tile, so amounts in the millions neither wrap
+   ("PKR" / "1,455,950") nor overflow when the tiles get narrow. */
+.summary-tiles-fit { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.summary-tiles-fit .summary-tile { container-type: inline-size; }
+.summary-tiles-fit .summary-tile .value { font-size: clamp(16px, 12cqw, 28px); white-space: nowrap; }
+
 /* ── Login ────────────────────────────────────────────────────── */
 .login-wrap {
   min-height: 100vh;

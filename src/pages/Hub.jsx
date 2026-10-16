@@ -3,6 +3,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { supabase, fetchAllRows, fetchAllRowsByIds } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
 import { splitRevenue } from '../lib/revenueSplit';
+import { buildVisibleRows, summarizeRows } from '../lib/billingMethodFilter';
+import { paymentMethodLabel } from '../constants/paymentMethods';
 import FinancialReportView from '../components/FinancialReportView';
 
 function formatPKR(n) {
@@ -236,14 +238,19 @@ export default function Hub({ profile }) {
 
   const profitLoss = ymdcRevenue - totalExpenses;
 
+  // Same method breakdown Billing's tiles use (shared billingMethodFilter
+  // helpers), so the two pages can't drift apart: each invoice is split across
+  // its real billing_payments legs, and an invoice with no payment rows falls
+  // back to its own payment_method/amount instead of vanishing. That fallback
+  // is what makes Cash + Bank + GIA International + Habib Insurance (+ Other,
+  // when any legacy 'other' money exists) add up to Total Revenue exactly.
   const paymentBreakdown = useMemo(() => {
-    const cash = payments.filter((p) => p.payment_method === 'cash').reduce((s, p) => s + Number(p.amount), 0);
-    const bank = payments
-      .filter((p) => p.payment_method === 'card' || p.payment_method === 'bank_transfer')
-      .reduce((s, p) => s + Number(p.amount), 0);
-    const insurance = payments.filter((p) => p.payment_method === 'insurance').reduce((s, p) => s + Number(p.amount), 0);
-    return { cash, bank, insurance };
-  }, [payments]);
+    const byBillingId = {};
+    payments.forEach((p) => {
+      (byBillingId[p.billing_id] ||= []).push(p);
+    });
+    return summarizeRows(buildVisibleRows(rows, byBillingId, 'all'));
+  }, [rows, payments]);
 
   const doctorWise = useMemo(() => {
     return doctors
@@ -393,7 +400,11 @@ export default function Hub({ profile }) {
           <tbody>
             <tr><td>Cash</td><td>{formatPKR(paymentBreakdown.cash)}</td></tr>
             <tr><td>Bank Account (Card + Bank Transfer)</td><td>{formatPKR(paymentBreakdown.bank)}</td></tr>
-            <tr><td>Insurance</td><td>{formatPKR(paymentBreakdown.insurance)}</td></tr>
+            <tr><td>{paymentMethodLabel('gia_international')}</td><td>{formatPKR(paymentBreakdown.gia_international)}</td></tr>
+            <tr><td>{paymentMethodLabel('habib_insurance')}</td><td>{formatPKR(paymentBreakdown.habib_insurance)}</td></tr>
+            {Math.abs(paymentBreakdown.other) > 0.005 && (
+              <tr><td>{paymentMethodLabel('other')}</td><td>{formatPKR(paymentBreakdown.other)}</td></tr>
+            )}
           </tbody>
         </table>
       </div>

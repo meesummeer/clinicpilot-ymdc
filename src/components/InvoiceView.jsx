@@ -2,13 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
-
-const PAYMENT_METHOD_LABEL = {
-  cash: 'Cash',
-  card: 'Card',
-  bank_transfer: 'Bank Transfer',
-  insurance: 'Insurance',
-};
+import { paymentMethodLabel } from '../constants/paymentMethods';
 
 export default function InvoiceView({ entry, onClose, autoPrint }) {
   const [payments, setPayments] = useState(null); // null = not yet loaded
@@ -108,9 +102,9 @@ export default function InvoiceView({ entry, onClose, autoPrint }) {
               <strong>{paymentList.length > 1 ? 'Payment Methods:' : 'Payment Method:'}</strong>{' '}
               {paymentList.length > 1
                 ? paymentList
-                    .map((p) => `${PAYMENT_METHOD_LABEL[p.payment_method] || p.payment_method} Rs${Number(p.amount).toFixed(2)}`)
+                    .map((p) => `${paymentMethodLabel(p.payment_method)} Rs${Number(p.amount).toFixed(2)}`)
                     .join('  ·  ')
-                : (PAYMENT_METHOD_LABEL[paymentList[0].payment_method] || paymentList[0].payment_method)}
+                : paymentMethodLabel(paymentList[0].payment_method)}
             </div>
           </div>
         )}

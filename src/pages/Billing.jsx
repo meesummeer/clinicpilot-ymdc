@@ -6,6 +6,7 @@ import DailyReportView from '../components/DailyReportView';
 import BillingReportView from '../components/BillingReportView';
 import { formatDateDMY } from '../lib/formatters';
 import { METHOD_FILTER_OPTIONS, buildVisibleRows, summarizeRows } from '../lib/billingMethodFilter';
+import { paymentMethodLabel } from '../constants/paymentMethods';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
@@ -251,7 +252,7 @@ export default function Billing({ profile, userEmail }) {
         />
       )}
 
-      <div className="summary-tiles">
+      <div className="summary-tiles summary-tiles-fit">
         <div className="summary-tile">
           <div className="label">Total Billed</div>
           <div className="value">{formatPKR(summary.total)}</div>
@@ -265,9 +266,22 @@ export default function Billing({ profile, userEmail }) {
           <div className="value">{formatPKR(summary.bank)}</div>
         </div>
         <div className="summary-tile">
-          <div className="label">Insurance</div>
-          <div className="value">{formatPKR(summary.insurance)}</div>
+          <div className="label">{paymentMethodLabel('gia_international')}</div>
+          <div className="value">{formatPKR(summary.gia_international)}</div>
         </div>
+        <div className="summary-tile">
+          <div className="label">{paymentMethodLabel('habib_insurance')}</div>
+          <div className="value">{formatPKR(summary.habib_insurance)}</div>
+        </div>
+        {/* Legacy 'other' payments aren't offered for new entries, but old rows
+            can still carry them. Show the tile only when there's money in it,
+            so the tiles always add up to Total Billed without adding clutter. */}
+        {Math.abs(summary.other) > 0.005 && (
+          <div className="summary-tile">
+            <div className="label">{paymentMethodLabel('other')}</div>
+            <div className="value">{formatPKR(summary.other)}</div>
+          </div>
+        )}
       </div>
 
       <div className="card">

@@ -61,15 +61,3 @@ export function doctorScheduleLabel(doctor) {
   const days = (doctor.working_days || []).map((d) => dayMap[d]);
   return `${days.join(', ')} · ${formatTime12h(doctor.start_time)} – ${formatTime12h(doctor.end_time)}`;
 }
-
-// ── Payment method labels ────────────────────────────────────────────────
-// The real payment_method values written to billing_payments, with their
-// display labels. How an invoice's method(s) are derived for display and
-// filtering (including "Mixed" for a split invoice, never stored anywhere)
-// lives in billingMethodFilter.js.
-export const PAYMENT_METHOD_LABELS = {
-  cash: 'Cash',
-  card: 'Card',
-  bank_transfer: 'Bank Transfer',
-  insurance: 'Insurance',
-};
