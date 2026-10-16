@@ -1,11 +1,15 @@
 import { createPortal } from 'react-dom';
-import { formatDateDMY, paymentMethodLabel } from '../lib/formatters';
+import { formatDateDMY } from '../lib/formatters';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
 
-export default function BillingReportView({ doctorName, dateFrom, dateTo, entries, paymentsByBillingId, onClose }) {
+// Exports exactly the rows currently on screen in All Entries (already
+// narrowed by date range, doctor and payment method): each row's amount is the
+// filtered amount, and the total at the bottom is the sum of those amounts, so
+// it always matches the on-screen figures.
+export default function BillingReportView({ doctorLabel, methodLabel, dateFrom, dateTo, rows, onClose }) {
   const printRoot = document.getElementById('invoice-print-root');
   if (!printRoot) return null;
 
@@ -13,7 +17,7 @@ export default function BillingReportView({ doctorName, dateFrom, dateTo, entrie
     window.print();
   }
 
-  const totalAmount = entries.reduce((s, e) => s + Number(e.amount), 0);
+  const totalAmount = rows.reduce((s, r) => s + r.amount, 0);
 
   return createPortal(
     <div className="invoice-overlay">
@@ -36,7 +40,7 @@ export default function BillingReportView({ doctorName, dateFrom, dateTo, entrie
         </div>
 
         <div className="invoice-report-date">
-          {doctorName} · {formatDateDMY(dateFrom)} – {formatDateDMY(dateTo)}
+          {formatDateDMY(dateFrom)} to {formatDateDMY(dateTo)} | Doctor: {doctorLabel} | Method: {methodLabel}
         </div>
 
         <table className="invoice-table">
@@ -52,18 +56,25 @@ export default function BillingReportView({ doctorName, dateFrom, dateTo, entrie
             </tr>
           </thead>
           <tbody>
-            {entries.length === 0 ? (
+            {rows.length === 0 ? (
               <tr><td colSpan={7}>No billing entries for this filter.</td></tr>
             ) : (
-              entries.map((e) => (
-                <tr key={e.id}>
-                  <td>{e.invoice_ref || '—'}</td>
-                  <td>{formatDateDMY(e.billing_date)}</td>
-                  <td>{e.patient_name}</td>
-                  <td>{e.doctors?.name || '—'}</td>
-                  <td>{e.service || '—'}</td>
-                  <td>{paymentMethodLabel(paymentsByBillingId?.[e.id])}</td>
-                  <td>{formatPKR(e.amount)}</td>
+              rows.map((r) => (
+                <tr key={r.entry.id}>
+                  <td>{r.entry.invoice_ref || '—'}</td>
+                  <td>{formatDateDMY(r.entry.billing_date)}</td>
+                  <td>{r.entry.patient_name}</td>
+                  <td>{r.entry.doctors?.name || '—'}</td>
+                  <td>{r.entry.service || '—'}</td>
+                  <td>{r.methodLabel}</td>
+                  <td>
+                    {formatPKR(r.amount)}
+                    {r.partial && (
+                      <div style={{ fontSize: 10, color: '#666', fontWeight: 400 }}>
+                        of {Number(r.invoiceAmount).toLocaleString('en-PK')} total (mixed)
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))
             )}

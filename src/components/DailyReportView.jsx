@@ -1,11 +1,15 @@
 import { createPortal } from 'react-dom';
-import { formatDateDMY, paymentMethodLabel } from '../lib/formatters';
+import { formatDateDMY } from '../lib/formatters';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
 
-export default function DailyReportView({ date, entries, paymentsByBillingId, onClose }) {
+// `rows` are Billing's filtered rows for this date (see buildVisibleRows): each
+// row's amount is already the amount matching the active payment-method filter
+// (the full invoice amount when no filter is active). Balance Due is a
+// whole-invoice figure, so it stays based on the invoice itself.
+export default function DailyReportView({ date, rows, methodLabel, onClose }) {
   if (!date) return null;
 
   const printRoot = document.getElementById('invoice-print-root');
@@ -15,8 +19,9 @@ export default function DailyReportView({ date, entries, paymentsByBillingId, on
     window.print();
   }
 
-  const totalAmount = entries.reduce((s, e) => s + Number(e.amount), 0);
-  const totalBalance = entries.reduce((s, e) => {
+  const totalAmount = rows.reduce((s, r) => s + r.amount, 0);
+  const totalBalance = rows.reduce((s, r) => {
+    const e = r.entry;
     const balance = e.billed_amount && e.billed_amount > e.amount ? e.billed_amount - e.amount : 0;
     return s + balance;
   }, 0);
@@ -41,7 +46,10 @@ export default function DailyReportView({ date, entries, paymentsByBillingId, on
           <div className="invoice-title">Daily Report</div>
         </div>
 
-        <div className="invoice-report-date">{formatDateDMY(date)}</div>
+        <div className="invoice-report-date">
+          {formatDateDMY(date)}
+          {methodLabel && methodLabel !== 'All' ? ` | Method: ${methodLabel}` : ''}
+        </div>
 
         <table className="invoice-table">
           <thead>
@@ -55,18 +63,26 @@ export default function DailyReportView({ date, entries, paymentsByBillingId, on
             </tr>
           </thead>
           <tbody>
-            {entries.length === 0 ? (
+            {rows.length === 0 ? (
               <tr><td colSpan={6}>No billing entries for this date.</td></tr>
             ) : (
-              entries.map((e) => {
+              rows.map((r) => {
+                const e = r.entry;
                 const hasBalance = e.billed_amount && e.billed_amount > e.amount;
                 return (
                   <tr key={e.id}>
                     <td>{e.patient_name}</td>
                     <td>{e.doctors?.name || '—'}</td>
                     <td>{e.service || '—'}</td>
-                    <td>{paymentMethodLabel(paymentsByBillingId?.[e.id])}</td>
-                    <td>{formatPKR(e.amount)}</td>
+                    <td>{r.methodLabel}</td>
+                    <td>
+                      {formatPKR(r.amount)}
+                      {r.partial && (
+                        <div style={{ fontSize: 10, color: '#666', fontWeight: 400 }}>
+                          of {Number(r.invoiceAmount).toLocaleString('en-PK')} total (mixed)
+                        </div>
+                      )}
+                    </td>
                     <td>{hasBalance ? formatPKR(e.billed_amount - e.amount) : '—'}</td>
                   </tr>
                 );

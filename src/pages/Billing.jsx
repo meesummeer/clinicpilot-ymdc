@@ -4,10 +4,22 @@ import BillingForm from '../components/BillingForm';
 import InvoiceView from '../components/InvoiceView';
 import DailyReportView from '../components/DailyReportView';
 import BillingReportView from '../components/BillingReportView';
-import { formatDateDMY, paymentMethodKey, paymentMethodLabel } from '../lib/formatters';
+import { formatDateDMY } from '../lib/formatters';
+import { METHOD_FILTER_OPTIONS, buildVisibleRows, summarizeRows } from '../lib/billingMethodFilter';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
+}
+
+// Muted note under an amount that is only part of an invoice, shown when a
+// payment-method filter hides some of that invoice's other legs.
+function PartialNote({ row }) {
+  if (!row.partial) return null;
+  return (
+    <div style={{ fontSize: 11, color: 'var(--grey-text)' }}>
+      of {Number(row.invoiceAmount).toLocaleString('en-PK')} total (mixed)
+    </div>
+  );
 }
 
 export default function Billing({ profile, userEmail }) {
@@ -20,14 +32,19 @@ export default function Billing({ profile, userEmail }) {
   const [invoiceAutoPrint, setInvoiceAutoPrint] = useState(false);
   const [reportDate, setReportDate] = useState(null);
   const [allEntriesDoctorFilter, setAllEntriesDoctorFilter] = useState('all');
-  const [allEntriesMethodFilter, setAllEntriesMethodFilter] = useState('all');
   const [showBillingReport, setShowBillingReport] = useState(false);
   const [payments, setPayments] = useState([]);
 
   const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = today.slice(0, 8) + '01';
 
+  // All page-level filters live here, above both By Date and All Entries, so
+  // they persist across both and drive every view (tiles, By Date, All
+  // Entries, the daily report and the PDF export) together. Date range and
+  // doctor narrow the queries below; the method filter is applied over the
+  // fully-paginated result via buildVisibleRows.
   const [filterDoctor, setFilterDoctor] = useState('all');
+  const [methodFilter, setMethodFilter] = useState('all');
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
   const [dateTo, setDateTo] = useState(today);
 
@@ -104,22 +121,9 @@ export default function Billing({ profile, userEmail }) {
     loadEntries();
   }
 
-  // Total Billed always counts every billing row once, from billing.amount
-  // — same source the PDF export already uses — so an invoice is never
-  // silently dropped just because it has no billing_payments rows (that's
-  // exactly what happened to 26-10163: zero payment rows meant it
-  // contributed nothing to any tile even though the row itself was fine).
-  const totalAmount = useMemo(
-    () => entries.reduce((s, e) => s + Number(e.amount), 0),
-    [entries]
-  );
-
-  // The real, authoritative payment method(s) for an invoice live only in
-  // its billing_payments rows, never in billing.payment_method — grouping
-  // them here lets the Method column, the filter, and the tiles below all
-  // derive the same effective method (a single method, or "mixed" for a
-  // split invoice) from the same source, so the filter never returns a
-  // row whose displayed Method doesn't match what was selected.
+  // The real, authoritative payment method(s) for an invoice live in its
+  // billing_payments rows (one per leg), grouped here by invoice. billing.
+  // payment_method is only a fallback for an invoice with no rows at all.
   const paymentsByBillingId = useMemo(() => {
     const map = {};
     payments.forEach((p) => {
@@ -129,59 +133,50 @@ export default function Billing({ profile, userEmail }) {
     return map;
   }, [payments]);
 
-  // Cash/Bank/Insurance split each invoice across its real billing_payments
-  // rows when it has any (so a split invoice still attributes correctly to
-  // each method it actually used) — but billing_payments only supplements
-  // that breakdown, it never gates inclusion: an invoice with zero payment
-  // rows still counts in full, under its own billing.payment_method.
-  const paymentBreakdown = useMemo(() => {
-    const totals = { cash: 0, bank: 0, insurance: 0 };
-    function addTo(method, amount) {
-      if (method === 'cash') totals.cash += amount;
-      else if (method === 'card' || method === 'bank_transfer') totals.bank += amount;
-      else if (method === 'insurance') totals.insurance += amount;
-    }
-    entries.forEach((e) => {
-      const entryPayments = paymentsByBillingId[e.id];
-      if (entryPayments && entryPayments.length > 0) {
-        entryPayments.forEach((p) => addTo(p.payment_method, Number(p.amount)));
-      } else {
-        addTo(e.payment_method, Number(e.amount));
-      }
-    });
-    return totals;
-  }, [entries, paymentsByBillingId]);
-  const cashTotal = paymentBreakdown.cash;
-  const bankTotal = paymentBreakdown.bank;
-  const insuranceTotal = paymentBreakdown.insurance;
-
-  const reportEntries = useMemo(
-    () => (reportDate ? entries.filter((e) => e.billing_date === reportDate) : []),
-    [reportDate, entries]
+  // One filtered view of the data (date range + doctor from the queries,
+  // payment method from here) that EVERYTHING below reads from — tiles, By
+  // Date, All Entries, the daily report, and the PDF — so they can never
+  // disagree. Under a method filter each row carries only the matching
+  // legs' amount; with no filter it's the full invoice amount, and an
+  // invoice is never dropped for lacking billing_payments rows.
+  const visibleRows = useMemo(
+    () => buildVisibleRows(entries, paymentsByBillingId, methodFilter),
+    [entries, paymentsByBillingId, methodFilter]
   );
 
-  const allEntriesFiltered = useMemo(() => {
-    let filtered = allEntriesDoctorFilter === 'all' ? entries : entries.filter((e) => e.doctor_id === allEntriesDoctorFilter);
-    if (allEntriesMethodFilter !== 'all') {
-      filtered = filtered.filter((e) => paymentMethodKey(paymentsByBillingId[e.id]) === allEntriesMethodFilter);
-    }
-    return filtered;
-  }, [entries, allEntriesDoctorFilter, allEntriesMethodFilter, paymentsByBillingId]);
+  const summary = useMemo(() => summarizeRows(visibleRows), [visibleRows]);
 
-  // Count and total both come from entries (the billing table) and its own
-  // amount field — a single consistent source, rather than pairing entries
-  // (for count) with a separately-fetched billing_payments join (for
-  // total), which can disagree if the two queries' results aren't
-  // perfectly in sync for a given date.
+  // All Entries additionally honours its own Doctor dropdown (as before),
+  // on top of the page-level filters.
+  const allEntriesRows = useMemo(
+    () => (allEntriesDoctorFilter === 'all' ? visibleRows : visibleRows.filter((r) => r.entry.doctor_id === allEntriesDoctorFilter)),
+    [visibleRows, allEntriesDoctorFilter]
+  );
+
+  const reportRows = useMemo(
+    () => (reportDate ? visibleRows.filter((r) => r.entry.billing_date === reportDate) : []),
+    [reportDate, visibleRows]
+  );
+
+  // Per date: transaction count and total, both from the same visible rows
+  // (so under a method filter they count only matching invoices and sum only
+  // the matching legs).
   const byDate = useMemo(() => {
     const map = {};
-    entries.forEach((e) => {
-      if (!map[e.billing_date]) map[e.billing_date] = { total: 0, count: 0 };
-      map[e.billing_date].total += Number(e.amount);
-      map[e.billing_date].count += 1;
+    visibleRows.forEach((r) => {
+      const date = r.entry.billing_date;
+      if (!map[date]) map[date] = { total: 0, count: 0 };
+      map[date].total += r.amount;
+      map[date].count += 1;
     });
     return Object.entries(map).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [entries]);
+  }, [visibleRows]);
+
+  const methodFilterLabel = methodFilter === 'all' ? 'All' : METHOD_FILTER_OPTIONS.find((o) => o.value === methodFilter)?.label || methodFilter;
+  // The doctor shown in the PDF header: the All Entries dropdown if it's set,
+  // otherwise the page-level Doctor filter.
+  const reportDoctorId = allEntriesDoctorFilter !== 'all' ? allEntriesDoctorFilter : filterDoctor;
+  const reportDoctorLabel = reportDoctorId === 'all' ? 'All' : doctors.find((d) => d.id === reportDoctorId)?.name || 'All';
 
   return (
     <div>
@@ -204,9 +199,18 @@ export default function Billing({ profile, userEmail }) {
               ))}
             </select>
           </div>
+          <div className="filter-field">
+            <label>Payment Method</label>
+            <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)}>
+              <option value="all">All Methods</option>
+              {METHOD_FILTER_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
           {canEdit && (
             <button
-              className="btn-primary"
+              className="btn-primary filters-row-end"
               onClick={() => {
                 if (showForm) {
                   setShowForm(false);
@@ -250,19 +254,19 @@ export default function Billing({ profile, userEmail }) {
       <div className="summary-tiles">
         <div className="summary-tile">
           <div className="label">Total Billed</div>
-          <div className="value">{formatPKR(totalAmount)}</div>
+          <div className="value">{formatPKR(summary.total)}</div>
         </div>
         <div className="summary-tile">
           <div className="label">Cash</div>
-          <div className="value">{formatPKR(cashTotal)}</div>
+          <div className="value">{formatPKR(summary.cash)}</div>
         </div>
         <div className="summary-tile">
           <div className="label">Bank Account</div>
-          <div className="value">{formatPKR(bankTotal)}</div>
+          <div className="value">{formatPKR(summary.bank)}</div>
         </div>
         <div className="summary-tile">
           <div className="label">Insurance</div>
-          <div className="value">{formatPKR(insuranceTotal)}</div>
+          <div className="value">{formatPKR(summary.insurance)}</div>
         </div>
       </div>
 
@@ -301,23 +305,13 @@ export default function Billing({ profile, userEmail }) {
               ))}
             </select>
           </div>
-          <div className="filter-field">
-            <label>Payment Method</label>
-            <select value={allEntriesMethodFilter} onChange={(e) => setAllEntriesMethodFilter(e.target.value)}>
-              <option value="all">All Methods</option>
-              <option value="cash">Cash</option>
-              <option value="card">Card</option>
-              <option value="bank_transfer">Bank Transfer</option>
-              <option value="insurance">Insurance</option>
-            </select>
-          </div>
           <button className="btn-secondary" style={{ marginLeft: 'auto' }} onClick={() => setShowBillingReport(true)}>
             Export as PDF
           </button>
         </div>
         {loading ? (
           <p>Loading…</p>
-        ) : allEntriesFiltered.length === 0 ? (
+        ) : allEntriesRows.length === 0 ? (
           <div className="empty-state">No billing entries for this filter.</div>
         ) : (
           <table className="data-table">
@@ -325,7 +319,9 @@ export default function Billing({ profile, userEmail }) {
               <tr><th>Ref No.</th><th>Date</th><th>Patient</th><th>Doctor</th><th>Service</th><th>Method</th><th>Amount</th><th></th>{canEditEntry && <th></th>}{canDelete && <th></th>}</tr>
             </thead>
             <tbody>
-              {allEntriesFiltered.map((e) => (
+              {allEntriesRows.map((row) => {
+                const e = row.entry;
+                return (
                 <tr key={e.id}>
                   <td>{e.invoice_ref || '—'}</td>
                   <td>{formatDateDMY(e.billing_date)}</td>
@@ -340,9 +336,10 @@ export default function Billing({ profile, userEmail }) {
                     {e.doctors?.name}
                   </td>
                   <td>{e.service || '—'}</td>
-                  <td>{paymentMethodLabel(paymentsByBillingId[e.id])}</td>
+                  <td>{row.methodLabel}</td>
                   <td>
-                    {formatPKR(e.amount)}
+                    {formatPKR(row.amount)}
+                    <PartialNote row={row} />
                     {e.billed_amount && e.billed_amount > e.amount && (
                       <div style={{ fontSize: 11, color: 'var(--red)', fontWeight: 700 }}>
                         Balance: {formatPKR(e.billed_amount - e.amount)}
@@ -371,7 +368,8 @@ export default function Billing({ profile, userEmail }) {
                     </td>
                   )}
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -390,18 +388,18 @@ export default function Billing({ profile, userEmail }) {
       {reportDate && (
         <DailyReportView
           date={reportDate}
-          entries={reportEntries}
-          paymentsByBillingId={paymentsByBillingId}
+          rows={reportRows}
+          methodLabel={methodFilterLabel}
           onClose={() => setReportDate(null)}
         />
       )}
       {showBillingReport && (
         <BillingReportView
-          doctorName={allEntriesDoctorFilter === 'all' ? 'All Doctors' : doctors.find((d) => d.id === allEntriesDoctorFilter)?.name}
+          doctorLabel={reportDoctorLabel}
+          methodLabel={methodFilterLabel}
           dateFrom={dateFrom}
           dateTo={dateTo}
-          entries={allEntriesFiltered}
-          paymentsByBillingId={paymentsByBillingId}
+          rows={allEntriesRows}
           onClose={() => setShowBillingReport(false)}
         />
       )}
