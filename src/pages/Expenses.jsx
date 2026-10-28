@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, fetchAllRows } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
+import ManageStaffModal from '../components/ManageStaffModal';
 
-// Staff roster for the Salary expense category — edit here to add/remove
-// staff or update their base salary.
-const STAFF_ROSTER = [
-  { name: 'Warsha', baseSalary: 35000 },
-  { name: 'Rashid', baseSalary: 55000 },
-  { name: 'Rajesh', baseSalary: 25000 },
-  { name: 'Gul Yar', baseSalary: 27000 },
-  { name: 'Zubair', baseSalary: 25000 },
-];
+// Sentinel <option> value for the "+ Add new staff member" entry at the
+// bottom of the Staff Member dropdown (never stored).
+const ADD_STAFF_VALUE = '__add_new_staff__';
 
 const CATEGORY_LABELS = { general: 'General', utility: 'Utility Bills', salary: 'Salary' };
 
@@ -33,6 +28,7 @@ function emptyForm(today) {
 
 export default function Expenses({ profile }) {
   const canManage = profile?.role === 'admin' || (profile?.role === 'csr' && profile?.has_expenses_access === true);
+  const isAdmin = profile?.role === 'admin';
 
   const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = today.slice(0, 8) + '01';
@@ -47,6 +43,41 @@ export default function Expenses({ profile }) {
   const [form, setForm] = useState(emptyForm(today));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // The Salary dropdown's roster (staff_members). `staff` holds everyone,
+  // active or not; the dropdown only offers the active ones.
+  const [staff, setStaff] = useState([]);
+  const [staffError, setStaffError] = useState('');
+  const [showAddStaff, setShowAddStaff] = useState(false);
+  const [newStaff, setNewStaff] = useState({ name: '', role: '', salary: '' });
+  const [newStaffError, setNewStaffError] = useState('');
+  const [savingStaff, setSavingStaff] = useState(false);
+  const [showManageStaff, setShowManageStaff] = useState(false);
+
+  const loadStaff = useCallback(async () => {
+    const { data, error: staffLoadError } = await fetchAllRows(() =>
+      supabase.from('staff_members').select('*').order('name', { ascending: true }).order('id', { ascending: true })
+    );
+    if (staffLoadError) {
+      console.error(staffLoadError.message);
+      setStaffError(`Couldn't load the staff list: ${staffLoadError.message}`);
+    } else {
+      setStaffError('');
+    }
+    setStaff(data || []);
+  }, []);
+
+  useEffect(() => {
+    if (canManage) loadStaff();
+  }, [canManage, loadStaff]);
+
+  const activeStaff = useMemo(
+    () =>
+      staff
+        .filter((s) => s.is_active)
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })),
+    [staff]
+  );
 
   const loadExpenses = useCallback(async () => {
     setLoading(true);
@@ -80,8 +111,61 @@ export default function Expenses({ profile }) {
   }
 
   function handleStaffChange(name) {
-    const staff = STAFF_ROSTER.find((s) => s.name === name);
-    setForm((f) => ({ ...f, staff_name: name, base_salary: staff ? String(staff.baseSalary) : f.base_salary }));
+    if (name === ADD_STAFF_VALUE) {
+      setNewStaff({ name: '', role: '', salary: '' });
+      setNewStaffError('');
+      setShowAddStaff(true);
+      return;
+    }
+    setShowAddStaff(false);
+    const picked = staff.find((s) => s.name === name);
+    setForm((f) => ({
+      ...f,
+      staff_name: name,
+      base_salary: picked && picked.default_base_salary != null ? String(picked.default_base_salary) : f.base_salary,
+    }));
+  }
+
+  async function handleSaveNewStaff() {
+    const name = newStaff.name.trim();
+    if (!name) {
+      setNewStaffError('Name is required.');
+      return;
+    }
+    const existing = staff.find((s) => s.name.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      setNewStaffError(
+        existing.is_active
+          ? `"${existing.name}" already exists — pick them from the dropdown.`
+          : `"${existing.name}" already exists but is deactivated — reactivate them under Manage staff.`
+      );
+      return;
+    }
+    const rawSalary = newStaff.salary.trim();
+    const salary = rawSalary === '' ? null : Number(rawSalary);
+    if (salary !== null && (!Number.isFinite(salary) || salary < 0)) {
+      setNewStaffError('Default base salary must be a number of 0 or more.');
+      return;
+    }
+
+    setSavingStaff(true);
+    setNewStaffError('');
+    const { error: insertError } = await supabase
+      .from('staff_members')
+      .insert({ name, role: newStaff.role.trim() || null, default_base_salary: salary });
+    setSavingStaff(false);
+    if (insertError) {
+      // 23505 = unique violation: someone added the same name since this
+      // page loaded its roster.
+      setNewStaffError(
+        insertError.code === '23505' ? `"${name}" already exists.` : `Couldn't add staff member: ${insertError.message}`
+      );
+      if (insertError.code === '23505') loadStaff();
+      return;
+    }
+    await loadStaff();
+    setForm((f) => ({ ...f, staff_name: name, base_salary: salary !== null ? String(salary) : f.base_salary }));
+    setShowAddStaff(false);
   }
 
   function openNew() {
@@ -106,6 +190,7 @@ export default function Expenses({ profile }) {
   }
 
   function closeForm() {
+    setShowAddStaff(false);
     setShowForm(false);
     setEditingExpense(null);
   }
@@ -243,10 +328,26 @@ export default function Expenses({ profile }) {
                   <label>Staff Member</label>
                   <select value={form.staff_name} onChange={(e) => handleStaffChange(e.target.value)} required>
                     <option value="">Select…</option>
-                    {STAFF_ROSTER.map((s) => (
-                      <option key={s.name} value={s.name}>{s.name}</option>
+                    {activeStaff.map((s) => (
+                      <option key={s.id} value={s.name}>{s.name}</option>
                     ))}
+                    {/* An entry being edited may name someone who has since been
+                        deactivated — keep showing them rather than a blank select. */}
+                    {form.staff_name && !activeStaff.some((s) => s.name === form.staff_name) && (
+                      <option value={form.staff_name}>{form.staff_name}</option>
+                    )}
+                    <option value={ADD_STAFF_VALUE}>+ Add new staff member</option>
                   </select>
+                  {staffError && <div className="error-text" style={{ marginTop: 6 }}>{staffError}</div>}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setShowManageStaff(true)}
+                      style={{ background: 'none', border: 'none', padding: 0, marginTop: 6, color: 'var(--navy)', fontSize: 12, fontWeight: 600, textDecoration: 'underline', cursor: 'pointer', textAlign: 'left' }}
+                    >
+                      Manage staff
+                    </button>
+                  )}
                 </div>
                 <div className="filter-field">
                   <label>Base Salary (PKR)</label>
@@ -260,6 +361,48 @@ export default function Expenses({ profile }) {
                   />
                 </div>
               </div>
+              {showAddStaff && (
+                <div style={{ border: '1px solid var(--border-grey)', borderRadius: 'var(--radius)', padding: 14, marginBottom: 14 }}>
+                  <strong style={{ display: 'block', marginBottom: 10 }}>New staff member</strong>
+                  {newStaffError && <div className="error-text">{newStaffError}</div>}
+                  <div className="filters-row">
+                    <div className="filter-field">
+                      <label>Name</label>
+                      <input
+                        aria-label="New staff name"
+                        value={newStaff.name}
+                        onChange={(e) => setNewStaff((n) => ({ ...n, name: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveNewStaff(); } }}
+                      />
+                    </div>
+                    <div className="filter-field">
+                      <label>Role (optional)</label>
+                      <input
+                        aria-label="New staff role"
+                        value={newStaff.role}
+                        onChange={(e) => setNewStaff((n) => ({ ...n, role: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveNewStaff(); } }}
+                      />
+                    </div>
+                    <div className="filter-field">
+                      <label>Default base salary (optional)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        aria-label="New staff default base salary"
+                        value={newStaff.salary}
+                        onChange={(e) => setNewStaff((n) => ({ ...n, salary: e.target.value }))}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveNewStaff(); } }}
+                      />
+                    </div>
+                  </div>
+                  <button type="button" className="btn-primary" disabled={savingStaff} onClick={handleSaveNewStaff} style={{ marginRight: 8 }}>
+                    {savingStaff ? 'Saving…' : 'Save staff member'}
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => setShowAddStaff(false)}>Cancel</button>
+                </div>
+              )}
               <div className="filters-row">
                 <div className="filter-field">
                   <label>Deduction Amount (PKR)</label>
@@ -350,6 +493,10 @@ export default function Expenses({ profile }) {
           </table>
         )}
       </div>
+
+      {showManageStaff && isAdmin && (
+        <ManageStaffModal staff={staff} onClose={() => setShowManageStaff(false)} onChanged={loadStaff} />
+      )}
     </div>
   );
 }
