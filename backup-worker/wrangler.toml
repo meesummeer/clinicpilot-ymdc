@@ -1,0 +1,13 @@
+name = "clinicpilot-backup"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "clinicpilot-ymdc-backups"
+
+# Public values only (the anon key ships in the web app too). No secrets.
+[vars]
+SUPABASE_URL = "https://risgijyhedkeziywlrye.supabase.co"
+SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpc2dpanloZWRrZXppeXdscnllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNTU5MzMsImV4cCI6MjEwNDYzMTkzM30.JJYEO6FyWrB2Q_7nVF3MeD8yFMT_FK-NGHw8XYWTl8M"
+ALLOWED_ORIGINS = "https://clinicpilot.ymdc.net,https://meesummeer.github.io"

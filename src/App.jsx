@@ -11,6 +11,7 @@ import Patients from './pages/Patients';
 import ManageDoctors from './pages/ManageDoctors';
 import Hub from './pages/Hub';
 import Expenses from './pages/Expenses';
+import Settings from './pages/Settings';
 import DoctorOwnCalendar from './pages/DoctorOwnCalendar';
 import DoctorRevenue from './pages/DoctorRevenue';
 import DoctorPatients from './pages/DoctorPatients';
@@ -26,6 +27,7 @@ const PAGE_TITLES = {
   '/hub': 'Hub',
   '/revenue': 'Revenue',
   '/expenses': 'Expenses',
+  '/settings': 'Settings',
 };
 
 function PageHeader() {
@@ -105,6 +107,11 @@ export default function App() {
                 <span className="icon-dot" /> Manage Doctors
               </NavLink>
             )}
+            {isAdmin && (
+              <NavLink to="/settings" className={linkClass} onClick={closeNav}>
+                <span className="icon-dot" /> Settings
+              </NavLink>
+            )}
           </nav>
         )}
         {isCeo && (
@@ -170,13 +177,14 @@ export default function App() {
             ) : (
               <>
                 <Route path="/" element={<Navigate to="/today" replace />} />
-                <Route path="/today" element={<Today />} />
+                <Route path="/today" element={<Today profile={profile} />} />
                 <Route path="/appointments" element={<Appointments profile={profile} />} />
                 <Route path="/calendar" element={<DoctorCalendar />} />
                 <Route path="/billing" element={<Billing profile={profile} userEmail={session.user.email} />} />
                 <Route path="/patients" element={<Patients userEmail={session.user.email} />} />
                 {hasExpensesAccess && <Route path="/expenses" element={<Expenses profile={profile} />} />}
                 {isAdmin && <Route path="/doctors" element={<ManageDoctors />} />}
+                {isAdmin && <Route path="/settings" element={<Settings profile={profile} session={session} />} />}
                 {(isAdmin || hasHubAccess) && <Route path="/hub" element={<Hub profile={profile} />} />}
                 <Route path="*" element={<Navigate to="/today" replace />} />
               </>

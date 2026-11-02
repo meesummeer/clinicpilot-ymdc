@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { formatTimeRange12h } from '../lib/formatters';
+import BackupReminder from '../components/BackupReminder';
 
 const STATUS_LABEL = {
   scheduled: 'Scheduled',
@@ -9,7 +10,7 @@ const STATUS_LABEL = {
   no_show: 'No Show',
 };
 
-export default function Today() {
+export default function Today({ profile }) {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const today = new Date().toISOString().slice(0, 10);
@@ -30,6 +31,7 @@ export default function Today() {
 
   return (
     <div>
+      <BackupReminder profile={profile} />
       <div className="card">
         <h2 style={{ marginTop: 0, color: 'var(--navy)' }}>Today — {todayLabel}</h2>
         <p style={{ color: '#777', marginTop: -6 }}>{appointments.length} appointment{appointments.length !== 1 ? 's' : ''} scheduled</p>
