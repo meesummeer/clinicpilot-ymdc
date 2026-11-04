@@ -35,6 +35,9 @@ function describeChange(row) {
     const n = round2(Number(row.new_value));
     return `Split: YMDC ${o}% → ${n}% (doctor ${round2(100 - o)}% → ${round2(100 - n)}%)`;
   }
+  if (row.field === 'keeps_material_cost') {
+    return `YMDC keeps material cost: ${row.old_value ?? '—'} → ${row.new_value ?? '—'}`;
+  }
   return `${row.field}: ${row.old_value ?? '—'} → ${row.new_value ?? '—'}`;
 }
 
@@ -49,6 +52,7 @@ function DoctorEditModal({ doctor, profile, onClose, onSaved, notify }) {
     end_time: doctor.end_time || '',
     active: doctor.active === true,
     doctorShare: String(doctorShareOf(doctor.split_percentage)),
+    keepsMaterialCost: doctor.keeps_material_cost === true,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -101,6 +105,10 @@ function DoctorEditModal({ doctor, profile, onClose, onSaved, notify }) {
   const oldSplitPercentage = round2(Number(doctor.split_percentage ?? 30));
   const splitChanged = shareValid && newSplitPercentage !== oldSplitPercentage;
   const colorValid = HEX_RE.test(draft.color_hex);
+  // Aesthetic doctors: YMDC buys the material and keeps the cost charged back
+  // through the DRC's "+ Add Cost" entries. Not applicable to service entries.
+  const keepsChanged = !isService && draft.keepsMaterialCost !== (doctor.keeps_material_cost === true);
+  const needsConfirm = splitChanged || keepsChanged;
 
   // What actually changed, as { column: { old, new, oldText, newText } }.
   function collectChanges() {
@@ -117,6 +125,7 @@ function DoctorEditModal({ doctor, profile, onClose, onSaved, notify }) {
     if (hhmm(draft.end_time) !== hhmm(doctor.end_time)) add('end_time', doctor.end_time, draft.end_time, hhmm(doctor.end_time), hhmm(draft.end_time));
     if (draft.active !== (doctor.active === true)) add('active', doctor.active === true, draft.active, doctor.active ? 'Yes' : 'No', draft.active ? 'Yes' : 'No');
     if (splitChanged) add('split_percentage', oldSplitPercentage, newSplitPercentage);
+    if (keepsChanged) add('keeps_material_cost', doctor.keeps_material_cost === true, draft.keepsMaterialCost, doctor.keeps_material_cost ? 'Yes' : 'No', draft.keepsMaterialCost ? 'Yes' : 'No');
     return changes;
   }
 
@@ -137,7 +146,7 @@ function DoctorEditModal({ doctor, profile, onClose, onSaved, notify }) {
       onClose();
       return;
     }
-    if (splitChanged) {
+    if (needsConfirm) {
       setConfirming(true);
       return;
     }
@@ -149,9 +158,11 @@ function DoctorEditModal({ doctor, profile, onClose, onSaved, notify }) {
     setError('');
     const changes = collectChanges();
     const columns = Object.keys(changes);
-    const hasSplit = columns.includes('split_percentage');
+    // Split and material-cost changes rewrite past numbers, so they must
+    // never go unlogged.
+    const hasSplit = columns.includes('split_percentage') || columns.includes('keeps_material_cost');
 
-    // A split change must never go unlogged: make sure the audit table is
+    // A financial change must never go unlogged: make sure the audit table is
     // there and readable before touching the doctor row.
     if (hasSplit) {
       const { error: probeError } = await supabase.from('doctor_change_log').select('id').limit(1);
@@ -187,7 +198,7 @@ function DoctorEditModal({ doctor, profile, onClose, onSaved, notify }) {
     if (logError && hasSplit) {
       notify('error', `Saved, but the audit log entry failed: ${logError.message}`);
     } else {
-      notify('success', hasSplit ? 'Saved. Split change logged.' : 'Doctor saved.');
+      notify('success', hasSplit ? 'Saved. Change logged.' : 'Doctor saved.');
     }
     await onSaved();
     onClose();
@@ -292,17 +303,46 @@ function DoctorEditModal({ doctor, profile, onClose, onSaved, notify }) {
             </div>
           </div>
 
+          {!isService && (
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  style={{ width: 'auto' }}
+                  checked={draft.keepsMaterialCost}
+                  onChange={(e) => set('keepsMaterialCost', e.target.checked)}
+                />
+                YMDC keeps material cost (aesthetic)
+              </label>
+              <div style={{ fontSize: 12, color: 'var(--grey-text)', marginTop: 4, marginLeft: 26 }}>
+                YMDC buys the material and charges it back through this doctor's costs, so the cost is kept by YMDC instead of being paid out to the doctor.
+              </div>
+            </div>
+          )}
+
           {confirming && (
             <div style={{ border: '2px solid var(--red)', borderRadius: 10, padding: 14, margin: '4px 0 14px', background: '#FDF2F2' }}>
-              <div style={{ fontWeight: 700, color: 'var(--red)', marginBottom: 6 }}>Change the split?</div>
+              <div style={{ fontWeight: 700, color: 'var(--red)', marginBottom: 6 }}>
+                {splitChanged && keepsChanged ? 'Change the split and material-cost handling?' : splitChanged ? 'Change the split?' : 'Change material-cost handling?'}
+              </div>
               <div style={{ fontSize: 14, marginBottom: 8 }}>
-                Splits are calculated live. This will change this entry's numbers for ALL past invoices and reports, including closed months. Continue?
+                Numbers are calculated live, not stored. This will change this entry's numbers for ALL past invoices and reports, including closed months. Continue?
               </div>
-              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>
-                {doctor.name}: doctor {round2(100 - oldSplitPercentage)}% / YMDC {oldSplitPercentage}% → doctor {round2(100 - newSplitPercentage)}% / YMDC {newSplitPercentage}%
-              </div>
+              {splitChanged && (
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>
+                  {doctor.name}: doctor {round2(100 - oldSplitPercentage)}% / YMDC {oldSplitPercentage}% → doctor {round2(100 - newSplitPercentage)}% / YMDC {newSplitPercentage}%
+                </div>
+              )}
+              {keepsChanged && (
+                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>
+                  {draft.keepsMaterialCost
+                    ? `${doctor.name}: material cost will be KEPT by YMDC (added to YMDC's income, not paid to the doctor)`
+                    : `${doctor.name}: material cost will be PASSED THROUGH to the doctor again (payout = share + cost)`}
+                </div>
+              )}
+              <div style={{ marginBottom: 4 }} />
               <button type="button" className="btn-primary" disabled={saving} onClick={doSave} style={{ marginRight: 8 }}>
-                {saving ? 'Saving…' : 'Yes, change the split'}
+                {saving ? 'Saving…' : 'Yes, apply to all past numbers'}
               </button>
               <button type="button" className="btn-secondary" disabled={saving} onClick={() => setConfirming(false)}>Cancel</button>
             </div>

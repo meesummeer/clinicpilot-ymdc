@@ -75,6 +75,7 @@ function TrendTooltip({ active, payload }) {
         <>
           {row('Revenue', d.revenue)}
           {row('YMDC share (after splits & costs)', d.ymdcShare)}
+          {d.materialKept > 0 && row('Aesthetic material kept by YMDC', d.materialKept)}
           {row('Doctor costs recorded', d.costs)}
           {row('Expenses', d.expenses)}
           <div style={{ borderTop: '1px solid var(--border-grey)', margin: '6px 0' }} />
@@ -111,6 +112,7 @@ export default function YmdcTrendChart() {
               net: r.net,
               revenue: r.totalRevenue,
               ymdcShare: r.ymdcShare,
+              materialKept: r.materialKept,
               costs: r.totalCosts,
               expenses: r.totalExpenses,
             };

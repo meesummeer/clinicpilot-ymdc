@@ -45,3 +45,53 @@ export function splitRevenue(entityRows, baseSplitPct, totalCosts) {
     effectiveSplitPct: basePct,
   };
 }
+
+// The ONE per-doctor calculation. The Hub cards, 3-month chart, Doctors list,
+// Financial Report, DRC page and a doctor's own revenue page all call this, so
+// they can't drift apart. `rows` / `costs` may be a wider set (every doctor's);
+// they are filtered to this doctor here.
+//
+//   net          = gross - costs
+//   doctorShare  = net x doctor%          (per-invoice overrides honoured, see splitRevenue)
+//   ymdcShare    = net x YMDC%
+//
+// Material costs (doctor_costs):
+//   normal doctor (keeps_material_cost = false):
+//     payout = doctorShare + costs          (the cost is passed through to the doctor)
+//     ymdcIncome = ymdcShare
+//   aesthetic doctor (keeps_material_cost = true): YMDC bought the material and
+//     the cost is charged back to the doctor, so YMDC keeps it:
+//     materialKept = costs
+//     payout = doctorShare only
+//     ymdcIncome = ymdcShare + materialKept
+//
+// Service categories (X-Ray, Ultrasound...) carry no costs and never keep any.
+// Everything is calculated live from stored invoices and costs; nothing stored
+// is ever adjusted, so flipping the flag applies retroactively.
+export function computeDoctorFigures({ doctor, rows, costs }) {
+  const isService = doctor.is_service_category === true;
+  const doctorRows = rows.filter((r) => r.doctor_id === doctor.id);
+  const costsList = isService
+    ? []
+    : costs.filter((c) => c.doctor_id === doctor.id).sort((a, b) => (a.cost_date < b.cost_date ? 1 : -1));
+  const totalCosts = costsList.reduce((s, c) => s + Number(c.amount), 0);
+  const split = splitRevenue(doctorRows, doctor.split_percentage, totalCosts);
+  const keepsMaterialCost = !isService && doctor.keeps_material_cost === true;
+  const materialKept = keepsMaterialCost ? totalCosts : 0;
+  return {
+    doctor,
+    isService,
+    transactionCount: doctorRows.length,
+    gross: split.gross,
+    costsList,
+    totalCosts,
+    net: split.net,
+    doctorShare: split.entityShare,
+    ymdcShare: split.centreShare,
+    effectiveSplitPct: split.effectiveSplitPct,
+    keepsMaterialCost,
+    materialKept,
+    doctorPayout: split.entityShare + (keepsMaterialCost ? 0 : totalCosts),
+    ymdcIncome: split.centreShare + materialKept,
+  };
+}

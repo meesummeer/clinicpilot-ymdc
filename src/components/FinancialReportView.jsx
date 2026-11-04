@@ -14,10 +14,17 @@ export default function FinancialReportView({
   expenseRows,
   totalExpense,
   netIncome,
+  materialKeptBy = [],
+  finalNetIncome,
   onClose,
 }) {
   const printRoot = document.getElementById('invoice-print-root');
   if (!printRoot) return null;
+
+  // Aesthetic doctors' material cost kept by YMDC. Hidden entirely when no
+  // flagged doctor has a cost in the range.
+  const materialKept = materialKeptBy.reduce((s, m) => s + m.amount, 0);
+  const showMaterial = materialKeptBy.length > 0 && materialKept > 0;
 
   function handlePrint() {
     window.print();
@@ -117,6 +124,23 @@ export default function FinancialReportView({
           <div style={{ color: 'var(--navy)' }}>Net Income</div>
           <div style={{ color: netIncome < 0 ? 'var(--red)' : 'var(--navy)' }}>{formatPKR(netIncome)}</div>
         </div>
+
+        {showMaterial && (
+          <>
+            <div className="invoice-meta-row" style={{ marginTop: 10, borderBottom: 'none', fontSize: 15, fontWeight: 700 }}>
+              <div style={{ color: 'var(--navy)' }}>Aesthetic Material Cost</div>
+              <div style={{ color: 'var(--navy)' }}>+ {formatPKR(materialKept)}</div>
+            </div>
+            <div style={{ fontSize: 11.5, color: '#777', marginTop: -6 }}>
+              Material bought by YMDC and used by {materialKeptBy.map((m) => `${m.name} (${formatPKR(m.amount)})`).join(', ')}; kept by YMDC.
+            </div>
+            <div style={{ borderTop: '2px solid var(--navy)', marginTop: 12 }} />
+            <div className="invoice-meta-row" style={{ marginTop: 8, borderBottom: 'none', fontSize: 18, fontWeight: 800 }}>
+              <div style={{ color: 'var(--navy)' }}>Net Income (after Aesthetic Material Cost)</div>
+              <div style={{ color: finalNetIncome < 0 ? 'var(--red)' : 'var(--navy)' }}>{formatPKR(finalNetIncome)}</div>
+            </div>
+          </>
+        )}
       </div>
     </div>,
     printRoot

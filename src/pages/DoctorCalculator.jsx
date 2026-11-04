@@ -197,7 +197,27 @@ export default function DoctorCalculator({ profile }) {
                   <div className="label">YMDC's Share ({f.effectiveSplitPct.toFixed(0)}%)</div>
                   <div className="value">{formatPKR(f.ymdcShare)}</div>
                 </div>
+                {f.keepsMaterialCost && (
+                  <div className="hub-split-block hub-split-block-material">
+                    <div className="label">Material cost kept by YMDC</div>
+                    <div className="value">{formatPKR(f.materialKept)}</div>
+                    <div className="note">Aesthetic material bought by YMDC — not paid to the doctor</div>
+                  </div>
+                )}
               </div>
+
+              {f.keepsMaterialCost && (
+                <div className="hub-calc-summary">
+                  <div>
+                    <span className="label">Payout to doctor (share only)</span>
+                    <span className="value">{formatPKR(f.doctorPayout)}</span>
+                  </div>
+                  <div>
+                    <span className="label">YMDC total from this doctor</span>
+                    <span className="value" style={{ color: '#8A6D0F' }}>{formatPKR(f.ymdcIncome)}</span>
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}

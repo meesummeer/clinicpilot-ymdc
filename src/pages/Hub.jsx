@@ -162,7 +162,10 @@ export default function Hub({ profile }) {
     [net, allDoctors]
   );
   const totalRevenue = net?.totalRevenue ?? 0;
-  const ymdcRevenue = net?.ymdcShare ?? 0;
+  // YMDC card = YMDC's share + the material cost it keeps for aesthetic doctors.
+  const ymdcRevenue = net?.ymdcIncome ?? 0;
+  const ymdcShareOnly = net?.ymdcShare ?? 0;
+  const materialKeptTotal = net?.materialKept ?? 0;
   const totalExpenses = net?.totalExpenses ?? 0;
   const profitLoss = net?.net ?? 0;
 
@@ -184,7 +187,8 @@ export default function Hub({ profile }) {
   // gross/cost/YMDC-share numbers as the Doctor Revenue Calculator below),
   // plus one row per service-category "doctor" (X-Ray, Ultrasound, etc.),
   // split by their own split_percentage the same way — so summing this
-  // table's YMDC's Share column always equals ymdcRevenue exactly.
+  // table's YMDC's Share column always equals ymdcShareOnly exactly (the
+  // report adds the aesthetic material cost kept below it).
   const incomeRows = useMemo(() => {
     const doctorRows = doctorFinancials.map((f) => ({
       name: f.doctor.name,
@@ -200,6 +204,16 @@ export default function Hub({ profile }) {
     }));
     return [...doctorRows, ...serviceRows];
   }, [doctorFinancials, serviceCategoryFinancials]);
+
+  // Aesthetic doctors' material cost, for the report's extra rows: one entry per
+  // flagged doctor that has a cost in the range (none -> the rows stay hidden).
+  const materialKeptBy = useMemo(
+    () =>
+      doctorFinancials
+        .filter((f) => f.keepsMaterialCost && f.materialKept > 0)
+        .map((f) => ({ name: f.doctor.name, amount: f.materialKept })),
+    [doctorFinancials]
+  );
 
   const expenseRows = useMemo(() => {
     const map = {};
@@ -251,7 +265,7 @@ export default function Hub({ profile }) {
         <div className="hub-hero-card hub-hero-card-gold">
           <div className="label">YMDC</div>
           <div className="value">{formatPKR(ymdcRevenue)}</div>
-          <div className="hub-hero-sub">Centre's actual share, after splits &amp; costs</div>
+          <div className="hub-hero-sub">Centre's share after splits &amp; costs{materialKeptTotal > 0 ? ', plus aesthetic material kept' : ''}</div>
         </div>
         <div className="hub-hero-card">
           <div className="label">Expenses</div>
@@ -261,7 +275,7 @@ export default function Hub({ profile }) {
         <div className={'hub-hero-card ' + (access.expenses && profitLoss < 0 ? 'hub-hero-card-negative' : 'hub-hero-card-positive')}>
           <div className="label">Profit / Loss</div>
           <div className="value">{access.expenses ? formatPKR(profitLoss) : '—'}</div>
-          <div className="hub-hero-sub">{access.expenses ? 'YMDC share minus expenses' : 'Needs Expenses access'}</div>
+          <div className="hub-hero-sub">{access.expenses ? 'YMDC total minus expenses' : 'Needs Expenses access'}</div>
         </div>
       </div>
       )}
@@ -392,10 +406,12 @@ export default function Hub({ profile }) {
           dateTo={dateTo}
           preparedBy={profile?.full_name || 'Admin'}
           incomeRows={incomeRows}
-          totalIncome={ymdcRevenue}
+          totalIncome={ymdcShareOnly}
           expenseRows={expenseRows}
           totalExpense={totalExpenses}
-          netIncome={profitLoss}
+          netIncome={ymdcShareOnly - totalExpenses}
+          materialKeptBy={materialKeptBy}
+          finalNetIncome={profitLoss}
           onClose={() => setShowFinancialReport(false)}
         />
       )}

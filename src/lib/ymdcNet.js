@@ -1,15 +1,19 @@
 import { supabase, fetchAllRows } from './supabaseClient';
-import { splitRevenue } from './revenueSplit';
+import { computeDoctorFigures } from './revenueSplit';
 
 // The ONE place YMDC's net share is calculated. The Hub's header cards and
 // the 3-month trend chart both come from getYmdcNet, so they can't disagree.
 //
-//   ymdcShare  = YMDC's share of doctor revenue after each invoice's split
-//                (its own Hijama override, else the doctor's split_percentage),
-//                with per-doctor costs shared between YMDC and the doctor in
-//                proportion to their shares (see revenueSplit.js), plus the
-//                service categories (X-Ray, etc.) split the same way with no costs.
-//   net        = ymdcShare - total expenses   (the Profit / Loss card)
+//   ymdcShare    = YMDC's share of doctor revenue after each invoice's split
+//                  (its own Hijama override, else the doctor's split_percentage),
+//                  with per-doctor costs shared between YMDC and the doctor in
+//                  proportion to their shares (see revenueSplit.js), plus the
+//                  service categories (X-Ray, etc.) split the same way with no costs.
+//   materialKept = material cost YMDC keeps for aesthetic doctors
+//                  (doctors.keeps_material_cost), i.e. their doctor_costs total
+//   ymdcIncome   = ymdcShare + materialKept   (the Hub's YMDC card)
+//   net          = ymdcIncome - total expenses (the Profit / Loss card)
+// The per-doctor math lives in computeDoctorFigures (revenueSplit.js).
 
 // Pure part: no network. `rows` are billing_analytics rows already limited to
 // the range; `costs` are doctor_costs rows; `expenses` are expenses rows.
@@ -18,48 +22,29 @@ export function computeYmdcNet({ doctors, rows, costs, expenses }) {
 
   const doctorFinancials = doctors
     .filter((d) => !d.is_service_category)
-    .map((d) => {
-      const doctorRows = rows.filter((r) => r.doctor_id === d.id);
-      const costsList = costs
-        .filter((c) => c.doctor_id === d.id)
-        .sort((a, b) => (a.cost_date < b.cost_date ? 1 : -1));
-      const totalCosts = costsList.reduce((s, c) => s + Number(c.amount), 0);
-      const split = splitRevenue(doctorRows, d.split_percentage, totalCosts);
-      return {
-        doctor: d,
-        transactionCount: doctorRows.length,
-        gross: split.gross,
-        costsList,
-        totalCosts,
-        net: split.net,
-        doctorShare: split.entityShare,
-        ymdcShare: split.centreShare,
-        effectiveSplitPct: split.effectiveSplitPct,
-      };
-    });
+    .map((d) => computeDoctorFigures({ doctor: d, rows, costs }));
 
   // Service-category "doctors" split by their own split_percentage like
   // real doctors (never a hardcoded 100%); costs aren't tracked for them.
   const serviceCategoryFinancials = doctors
     .filter((d) => d.is_service_category)
-    .map((d) => {
-      const doctorRows = rows.filter((r) => r.doctor_id === d.id);
-      const split = splitRevenue(doctorRows, d.split_percentage, 0);
-      return { doctor: d, transactionCount: doctorRows.length, gross: split.gross, ymdcShare: split.centreShare };
-    });
+    .map((d) => computeDoctorFigures({ doctor: d, rows, costs }));
 
-  const ymdcShare =
-    doctorFinancials.reduce((s, f) => s + f.ymdcShare, 0) +
-    serviceCategoryFinancials.reduce((s, f) => s + f.ymdcShare, 0);
+  const all = [...doctorFinancials, ...serviceCategoryFinancials];
+  const ymdcShare = all.reduce((s, f) => s + f.ymdcShare, 0);
+  const materialKept = all.reduce((s, f) => s + f.materialKept, 0);
+  const ymdcIncome = ymdcShare + materialKept;
   const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0);
   const totalCosts = costs.reduce((s, c) => s + Number(c.amount), 0);
 
   return {
     totalRevenue,
     ymdcShare,
+    materialKept,
+    ymdcIncome,
     totalCosts,
     totalExpenses,
-    net: ymdcShare - totalExpenses,
+    net: ymdcIncome - totalExpenses,
     doctorFinancials,
     serviceCategoryFinancials,
     // 0 means there is nothing at all in this range (no billing, costs or expenses).
@@ -121,16 +106,15 @@ export async function getYmdcNet(startDate, endDate, { doctors: preloadedDoctors
 // same cost treatment as the DRC: service categories carry no costs.
 export function computeEntityBreakdown({ doctors, rows, costs }) {
   return doctors.map((d) => {
-    const entryRows = rows.filter((r) => r.doctor_id === d.id);
-    const isService = d.is_service_category === true;
-    const totalCosts = isService ? 0 : costs.filter((c) => c.doctor_id === d.id).reduce((s, c) => s + Number(c.amount), 0);
-    const split = splitRevenue(entryRows, d.split_percentage, totalCosts);
+    const f = computeDoctorFigures({ doctor: d, rows, costs });
     return {
       doctor: d,
-      isService,
-      transactionCount: entryRows.length,
-      gross: split.gross,
-      ymdcShare: split.centreShare,
+      isService: f.isService,
+      transactionCount: f.transactionCount,
+      gross: f.gross,
+      // Includes the material cost kept for aesthetic doctors.
+      ymdcShare: f.ymdcIncome,
+      materialKept: f.materialKept,
     };
   });
 }
