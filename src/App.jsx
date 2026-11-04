@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from './lib/useAuth';
 import { supabase } from './lib/supabaseClient';
 import Login from './pages/Login';
@@ -17,20 +17,8 @@ import DoctorOwnCalendar from './pages/DoctorOwnCalendar';
 import DoctorRevenue from './pages/DoctorRevenue';
 import DoctorPatients from './pages/DoctorPatients';
 import Logo from './components/Logo';
-
-const PAGE_TITLES = {
-  '/today': "Today's Appointments",
-  '/appointments': 'Appointments',
-  '/calendar': 'Doctor Calendar',
-  '/billing': 'Billing',
-  '/patients': 'Patients',
-  '/doctors': 'Manage Doctors',
-  '/hub': 'Hub',
-  '/revenue': 'Revenue',
-  '/expenses': 'Expenses',
-  '/settings': 'Settings',
-  '/doctor-calculator': 'Doctor Calculator',
-};
+import SidebarNav from './components/Sidebar';
+import { PAGES, PAGE_TITLES, canAccess, effectiveRole, homePath, landingPath } from './permissions';
 
 function PageHeader() {
   const location = useLocation();
@@ -38,6 +26,49 @@ function PageHeader() {
   return (
     <div className="topheader">
       <h1>{title}</h1>
+    </div>
+  );
+}
+
+// Shown after a blocked URL sends someone back to the Hub.
+function NoAccessToast() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (location.state && location.state.noAccess) {
+      setVisible(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location, navigate]);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    const timer = setTimeout(() => setVisible(false), 4000);
+    return () => clearTimeout(timer);
+  }, [visible]);
+
+  if (!visible) return null;
+  return (
+    <div
+      role="alert"
+      style={{
+        position: 'fixed',
+        top: 18,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 2000,
+        background: 'var(--red)',
+        color: 'white',
+        padding: '10px 18px',
+        borderRadius: 10,
+        fontSize: 14,
+        fontWeight: 600,
+        boxShadow: 'var(--shadow-lg)',
+      }}
+    >
+      No access — you don't have permission to open that page.
     </div>
   );
 }
@@ -59,14 +90,25 @@ export default function App() {
     );
   }
 
-  const isCeo = profile.role === 'ceo';
-  const isAdmin = profile.role === 'admin';
-  const isDoctor = profile.role === 'doctor';
-  const hasExpensesAccess = profile.has_expenses_access === true;
-  const hasHubAccess = profile.has_hub_access === true;
+  const isDoctor = effectiveRole(profile) === 'doctor';
 
-  const linkClass = ({ isActive }) => 'sidebar-link' + (isActive ? ' active' : '');
   const closeNav = () => setMobileNavOpen(false);
+
+  // Every page and what it renders. Access is decided in permissions.js —
+  // a URL the user has no access to redirects to the Hub with a toast.
+  const guardedRoutes = [
+    { page: 'hub', element: <Hub profile={profile} /> },
+    { page: 'today', element: <Today profile={profile} /> },
+    { page: 'calendar', element: isDoctor ? <DoctorOwnCalendar profile={profile} /> : <DoctorCalendar /> },
+    { page: 'appointments', element: <Appointments profile={profile} /> },
+    { page: 'billing', element: <Billing profile={profile} userEmail={session.user.email} /> },
+    { page: 'patients', element: isDoctor ? <DoctorPatients profile={profile} /> : <Patients userEmail={session.user.email} /> },
+    { page: 'revenue', element: <DoctorRevenue profile={profile} /> },
+    { page: 'expenses', element: <Expenses profile={profile} /> },
+    { page: 'doctorCalculator', element: <DoctorCalculator profile={profile} /> },
+    { page: 'settings', element: <Settings profile={profile} session={session} /> },
+    { page: 'doctors', element: <ManageDoctors /> },
+  ];
 
   return (
     <div className="app-shell">
@@ -77,79 +119,11 @@ export default function App() {
         </div>
         <div className="sidebar-app-name">ClinicPilot</div>
 
-        {!isCeo && !isDoctor && (
-          <nav className="sidebar-nav">
-            {(isAdmin || hasHubAccess) && (
-              <NavLink to="/hub" className={linkClass} onClick={closeNav}>
-                <span className="icon-dot" /> Hub
-              </NavLink>
-            )}
-            <NavLink to="/today" className={linkClass} onClick={closeNav}>
-              <span className="icon-dot" /> Today
-            </NavLink>
-            <NavLink to="/appointments" className={linkClass} onClick={closeNav}>
-              <span className="icon-dot" /> Appointments
-            </NavLink>
-            <NavLink to="/calendar" className={linkClass} onClick={closeNav}>
-              <span className="icon-dot" /> Calendar
-            </NavLink>
-            <NavLink to="/billing" className={linkClass} onClick={closeNav}>
-              <span className="icon-dot" /> Billing
-            </NavLink>
-            <NavLink to="/patients" className={linkClass} onClick={closeNav}>
-              <span className="icon-dot" /> Patients
-            </NavLink>
-            {hasExpensesAccess && (
-              <NavLink to="/expenses" className={linkClass} onClick={closeNav}>
-                <span className="icon-dot" /> Expenses
-              </NavLink>
-            )}
-            {isAdmin && (
-              <NavLink to="/doctor-calculator" className={linkClass} onClick={closeNav}>
-                <span className="icon-dot" /> Doctor Calculator
-              </NavLink>
-            )}
-            {isAdmin && (
-              <NavLink to="/doctors" className={linkClass} onClick={closeNav}>
-                <span className="icon-dot" /> Manage Doctors
-              </NavLink>
-            )}
-            {isAdmin && (
-              <NavLink to="/settings" className={linkClass} onClick={closeNav}>
-                <span className="icon-dot" /> Settings
-              </NavLink>
-            )}
-          </nav>
-        )}
-        {isCeo && (
-          <nav className="sidebar-nav">
-            <NavLink to="/hub" className={linkClass} onClick={closeNav}>
-              <span className="icon-dot" /> Hub
-            </NavLink>
-            {hasExpensesAccess && (
-              <NavLink to="/expenses" className={linkClass} onClick={closeNav}>
-                <span className="icon-dot" /> Expenses
-              </NavLink>
-            )}
-          </nav>
-        )}
-        {isDoctor && (
-          <nav className="sidebar-nav">
-            <NavLink to="/calendar" className={linkClass} onClick={closeNav}>
-              <span className="icon-dot" /> Calendar
-            </NavLink>
-            <NavLink to="/revenue" className={linkClass} onClick={closeNav}>
-              <span className="icon-dot" /> Revenue
-            </NavLink>
-            <NavLink to="/patients" className={linkClass} onClick={closeNav}>
-              <span className="icon-dot" /> Patients
-            </NavLink>
-          </nav>
-        )}
+        <SidebarNav profile={profile} onNavigate={closeNav} />
 
         <div className="sidebar-footer">
           <div className="sidebar-user">{profile.full_name}</div>
-          <div className="sidebar-role">{profile.role}</div>
+          <div className="sidebar-role">{effectiveRole(profile)}</div>
           <button className="sidebar-signout" onClick={() => supabase.auth.signOut()}>Sign Out</button>
         </div>
       </div>
@@ -165,38 +139,17 @@ export default function App() {
         </div>
         <PageHeader />
         <div className="content">
+          <NoAccessToast />
           <Routes>
-            {isCeo ? (
-              <>
-                <Route path="/" element={<Navigate to="/hub" replace />} />
-                <Route path="/hub" element={<Hub profile={profile} />} />
-                {hasExpensesAccess && <Route path="/expenses" element={<Expenses profile={profile} />} />}
-                <Route path="*" element={<Navigate to="/hub" replace />} />
-              </>
-            ) : isDoctor ? (
-              <>
-                <Route path="/" element={<Navigate to="/calendar" replace />} />
-                <Route path="/calendar" element={<DoctorOwnCalendar profile={profile} />} />
-                <Route path="/revenue" element={<DoctorRevenue profile={profile} />} />
-                <Route path="/patients" element={<DoctorPatients profile={profile} />} />
-                <Route path="*" element={<Navigate to="/calendar" replace />} />
-              </>
-            ) : (
-              <>
-                <Route path="/" element={<Navigate to="/today" replace />} />
-                <Route path="/today" element={<Today profile={profile} />} />
-                <Route path="/appointments" element={<Appointments profile={profile} />} />
-                <Route path="/calendar" element={<DoctorCalendar />} />
-                <Route path="/billing" element={<Billing profile={profile} userEmail={session.user.email} />} />
-                <Route path="/patients" element={<Patients userEmail={session.user.email} />} />
-                {hasExpensesAccess && <Route path="/expenses" element={<Expenses profile={profile} />} />}
-                {isAdmin && <Route path="/doctor-calculator" element={<DoctorCalculator profile={profile} />} />}
-                {isAdmin && <Route path="/doctors" element={<ManageDoctors />} />}
-                {isAdmin && <Route path="/settings" element={<Settings profile={profile} session={session} />} />}
-                {(isAdmin || hasHubAccess) && <Route path="/hub" element={<Hub profile={profile} />} />}
-                <Route path="*" element={<Navigate to="/today" replace />} />
-              </>
-            )}
+            <Route path="/" element={<Navigate to={landingPath(profile)} replace />} />
+            {guardedRoutes.map(({ page, element }) => (
+              <Route
+                key={page}
+                path={PAGES[page].path}
+                element={canAccess(profile, page) ? element : <Navigate to={homePath(profile)} replace state={{ noAccess: true }} />}
+              />
+            ))}
+            <Route path="*" element={<Navigate to={landingPath(profile)} replace />} />
           </Routes>
         </div>
         <div className="app-footer">Made by Meesum Mir | CyberHealth Solutions</div>

@@ -752,3 +752,47 @@ table.data-table tbody tr:hover td { background: #F9F9FD; }
   .hub-split-blocks { flex-direction: column; }
   .hub-calc-summary { flex-direction: column; gap: 14px; }
 }
+
+/* ── Date range preset pills (DatePresets) ───────────────────────── */
+.date-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.date-preset {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1.5px solid var(--navy);
+  background: white;
+  color: var(--navy);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: var(--transition);
+}
+.date-preset:hover { background: #E8ECFB; }
+.date-preset.active, .date-preset.active:hover { background: var(--navy); color: white; }
+
+/* ── Sidebar groups (ABP / Expenses / Settings) ──────────────────── */
+.sidebar-group-header {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: rgba(255,255,255,0.72);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: var(--transition);
+}
+.sidebar-group-header:hover { background: rgba(255,255,255,0.08); color: white; }
+.sidebar-group-header.has-active { color: white; }
+.sidebar-group-header .icon-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.55; flex-shrink: 0; }
+.sidebar-chevron { margin-left: auto; width: 9px; height: 9px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); transition: transform 0.2s ease; opacity: 0.7; }
+.sidebar-group-header.open .sidebar-chevron { transform: rotate(45deg); }
+.sidebar-children { display: flex; flex-direction: column; gap: 3px; margin: 2px 0 4px; }
+.sidebar-link.sidebar-child { margin-left: 18px; padding: 8px 14px; font-size: 13px; }

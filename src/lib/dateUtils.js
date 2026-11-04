@@ -76,3 +76,42 @@ export function lastThreeKarachiMonths(now = new Date()) {
     };
   });
 }
+
+// ── Quick date-range presets (Asia/Karachi) ─────────────────────────
+function isoFromUTC(y, m, d) {
+  // m is 1-12; Date.UTC normalises day overflow/underflow (day 0 = last day of prior month).
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`;
+}
+
+// The six presets for the From/To filters, all in Karachi calendar time.
+export function datePresetRanges(now = new Date()) {
+  const today = karachiTodayISO(now);
+  const y = Number(today.slice(0, 4));
+  const m = Number(today.slice(5, 7));
+  const d = Number(today.slice(8, 10));
+
+  const prevMonthY = m === 1 ? y - 1 : y;
+  const prevMonthM = m === 1 ? 12 : m - 1;
+  const prevMonthLastDay = new Date(Date.UTC(prevMonthY, prevMonthM, 0)).getUTCDate();
+
+  return [
+    { key: 'today', label: 'Today', from: today, to: today },
+    { key: 'yesterday', label: 'Yesterday', from: isoFromUTC(y, m, d - 1), to: isoFromUTC(y, m, d - 1) },
+    { key: 'thisMonth', label: 'This Month', from: isoFromUTC(y, m, 1), to: today },
+    {
+      key: 'lastMonth',
+      label: 'Last Month',
+      from: isoFromUTC(prevMonthY, prevMonthM, 1),
+      to: isoFromUTC(prevMonthY, prevMonthM, prevMonthLastDay),
+    },
+    {
+      key: 'lastMonthThisTime',
+      label: 'Last Month This Time',
+      from: isoFromUTC(prevMonthY, prevMonthM, 1),
+      // same day-of-month last month, clamped (Mar 31 -> Feb 28/29)
+      to: isoFromUTC(prevMonthY, prevMonthM, Math.min(d, prevMonthLastDay)),
+    },
+    { key: 'lastYear', label: 'Last Year', from: `${y - 1}-01-01`, to: `${y - 1}-12-31` },
+  ];
+}

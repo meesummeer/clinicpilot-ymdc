@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase, fetchAllRows } from '../lib/supabaseClient';
 import { formatDateDMY } from '../lib/formatters';
+import { karachiTodayISO } from '../lib/dateUtils';
 import ManageStaffModal from '../components/ManageStaffModal';
+import DatePresets from '../components/DatePresets';
 
 // Sentinel <option> value for the "+ Add new staff member" entry at the
 // bottom of the Staff Member dropdown (never stored).
@@ -30,7 +32,8 @@ export default function Expenses({ profile }) {
   const canManage = profile?.role === 'admin' || (profile?.role === 'csr' && profile?.has_expenses_access === true);
   const isAdmin = profile?.role === 'admin';
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Clinic (Karachi) calendar, same as the date presets.
+  const today = karachiTodayISO();
   const firstOfMonth = today.slice(0, 8) + '01';
 
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
@@ -270,6 +273,14 @@ export default function Expenses({ profile }) {
             <label>To</label>
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
+          <DatePresets
+            from={dateFrom}
+            to={dateTo}
+            onSelect={(f, t) => {
+              setDateFrom(f);
+              setDateTo(t);
+            }}
+          />
           {canManage && (
             <button className="btn-primary" onClick={() => (showForm ? closeForm() : openNew())}>
               {showForm ? 'Close' : '+ Add Expense'}

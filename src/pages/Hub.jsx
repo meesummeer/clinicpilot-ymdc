@@ -8,6 +8,8 @@ import { paymentMethodLabel } from '../constants/paymentMethods';
 import FinancialReportView from '../components/FinancialReportView';
 import YmdcTrendChart from '../components/YmdcTrendChart';
 import TopDoctorsList from '../components/TopDoctorsList';
+import DatePresets from '../components/DatePresets';
+import { hubAccess } from '../permissions';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
@@ -32,6 +34,11 @@ const ARCHIVE_EXPENSE_CATEGORIES = [
 ];
 
 export default function Hub({ profile }) {
+  // What this user may see (see permissions.js): the financial blocks and,
+  // separately, the expense-dependent figures.
+  const access = hubAccess(profile);
+  const showFinancials = access.financials;
+
   // Clinic (Karachi) calendar, so "today" and "this month" match the
   // trend chart's month boundaries.
   const today = karachiTodayISO();
@@ -88,6 +95,10 @@ export default function Hub({ profile }) {
   const [archiveLoading, setArchiveLoading] = useState(true);
 
   useEffect(() => {
+    if (!showFinancials) {
+      setArchiveLoading(false);
+      return;
+    }
     supabase
       .from('monthly_pnl_archive')
       .select('*')
@@ -97,7 +108,7 @@ export default function Hub({ profile }) {
         setArchiveRows(data || []);
         setArchiveLoading(false);
       });
-  }, []);
+  }, [showFinancials]);
 
   const archiveMonths = useMemo(() => {
     const seen = new Map();
@@ -203,12 +214,23 @@ export default function Hub({ profile }) {
             <label>To</label>
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
-          <button className="btn-secondary" style={{ marginLeft: 'auto' }} onClick={() => setShowFinancialReport(true)}>
-            Generate Financial Report
-          </button>
+          <DatePresets
+            from={dateFrom}
+            to={dateTo}
+            onSelect={(f, t) => {
+              setDateFrom(f);
+              setDateTo(t);
+            }}
+          />
+          {showFinancials && access.expenses && (
+            <button className="btn-secondary" style={{ marginLeft: 'auto' }} onClick={() => setShowFinancialReport(true)}>
+              Generate Financial Report
+            </button>
+          )}
         </div>
       </div>
 
+      {showFinancials && (
       <div className="hub-hero-grid">
         <div className="hub-hero-card">
           <div className="label">Total Revenue</div>
@@ -222,24 +244,36 @@ export default function Hub({ profile }) {
         </div>
         <div className="hub-hero-card">
           <div className="label">Expenses</div>
-          <div className="value">{formatPKR(totalExpenses)}</div>
-          <div className="hub-hero-sub">All categories, selected range</div>
+          <div className="value">{access.expenses ? formatPKR(totalExpenses) : '—'}</div>
+          <div className="hub-hero-sub">{access.expenses ? 'All categories, selected range' : 'Needs Expenses access'}</div>
         </div>
-        <div className={'hub-hero-card ' + (profitLoss < 0 ? 'hub-hero-card-negative' : 'hub-hero-card-positive')}>
+        <div className={'hub-hero-card ' + (access.expenses && profitLoss < 0 ? 'hub-hero-card-negative' : 'hub-hero-card-positive')}>
           <div className="label">Profit / Loss</div>
-          <div className="value">{formatPKR(profitLoss)}</div>
-          <div className="hub-hero-sub">YMDC share minus expenses</div>
+          <div className="value">{access.expenses ? formatPKR(profitLoss) : '—'}</div>
+          <div className="hub-hero-sub">{access.expenses ? 'YMDC share minus expenses' : 'Needs Expenses access'}</div>
         </div>
       </div>
+      )}
 
-      <YmdcTrendChart />
+      {showFinancials && (
+        access.expenses ? (
+          <YmdcTrendChart />
+        ) : (
+          <div className="card">
+            <h3 style={{ marginTop: 0 }}>3-Month Trend: YMDC Net Share</h3>
+            <div className="empty-state">The net share needs Expenses access, so it isn't shown for this account.</div>
+          </div>
+        )
+      )}
 
       <TopDoctorsList
         doctorFinancials={doctorFinancials}
         serviceCategoryFinancials={serviceCategoryFinancials}
         loading={loading}
+        showFinancials={showFinancials}
       />
 
+      {showFinancials && (
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Cash vs Bank Account</h3>
         <table className="data-table">
@@ -255,7 +289,9 @@ export default function Hub({ profile }) {
           </tbody>
         </table>
       </div>
+      )}
 
+      {showFinancials && (
       <div className="card hub-archive-section">
         <h3>Historical P&amp;L (Archived Reports)</h3>
         <div className="hub-archive-caption">Manually reconciled monthly reports — not live data.</div>
@@ -342,8 +378,9 @@ export default function Hub({ profile }) {
           </>
         )}
       </div>
+      )}
 
-      {showFinancialReport && (
+      {showFinancials && access.expenses && showFinancialReport && (
         <FinancialReportView
           dateFrom={dateFrom}
           dateTo={dateTo}
