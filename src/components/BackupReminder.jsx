@@ -41,7 +41,7 @@ export default function BackupReminder({ profile }) {
       }}
     >
       No cloud backup in the last 24 hours.{' '}
-      <Link to="/settings" style={{ color: '#7A5300', textDecoration: 'underline' }}>Go to Settings</Link>
+      <Link to="/backup" style={{ color: '#7A5300', textDecoration: 'underline' }}>Go to Backup</Link>
     </div>
   );
 }

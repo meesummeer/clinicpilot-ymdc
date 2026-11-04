@@ -112,3 +112,25 @@ export async function getYmdcNet(startDate, endDate, { doctors: preloadedDoctors
   const expenses = expensesResult.data || [];
   return { doctors, rows, costs, expenses, ...computeYmdcNet({ doctors, rows, costs, expenses }) };
 }
+
+// Per-entry breakdown for the Hub's Doctors / Services lists. Unlike
+// computeYmdcNet (which only sees the active doctors it is handed, and drives
+// the header cards), this takes EVERY doctors row — inactive ones too — so an
+// inactive doctor who still billed in the range appears and the lists add up
+// to Total Revenue. Same per-invoice split (Hijama override included) and
+// same cost treatment as the DRC: service categories carry no costs.
+export function computeEntityBreakdown({ doctors, rows, costs }) {
+  return doctors.map((d) => {
+    const entryRows = rows.filter((r) => r.doctor_id === d.id);
+    const isService = d.is_service_category === true;
+    const totalCosts = isService ? 0 : costs.filter((c) => c.doctor_id === d.id).reduce((s, c) => s + Number(c.amount), 0);
+    const split = splitRevenue(entryRows, d.split_percentage, totalCosts);
+    return {
+      doctor: d,
+      isService,
+      transactionCount: entryRows.length,
+      gross: split.gross,
+      ymdcShare: split.centreShare,
+    };
+  });
+}

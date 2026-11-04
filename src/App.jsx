@@ -11,14 +11,14 @@ import Patients from './pages/Patients';
 import ManageDoctors from './pages/ManageDoctors';
 import Hub from './pages/Hub';
 import Expenses from './pages/Expenses';
-import Settings from './pages/Settings';
+import Backup from './pages/Backup';
 import DoctorCalculator from './pages/DoctorCalculator';
 import DoctorOwnCalendar from './pages/DoctorOwnCalendar';
 import DoctorRevenue from './pages/DoctorRevenue';
 import DoctorPatients from './pages/DoctorPatients';
 import Logo from './components/Logo';
 import SidebarNav from './components/Sidebar';
-import { PAGES, PAGE_TITLES, canAccess, effectiveRole, homePath, landingPath } from './permissions';
+import { PAGES, PAGE_TITLES, ROUTE_ALIASES, canAccess, effectiveRole, homePath, landingPath } from './permissions';
 
 function PageHeader() {
   const location = useLocation();
@@ -106,8 +106,8 @@ export default function App() {
     { page: 'revenue', element: <DoctorRevenue profile={profile} /> },
     { page: 'expenses', element: <Expenses profile={profile} /> },
     { page: 'doctorCalculator', element: <DoctorCalculator profile={profile} /> },
-    { page: 'settings', element: <Settings profile={profile} session={session} /> },
-    { page: 'doctors', element: <ManageDoctors /> },
+    { page: 'backup', element: <Backup profile={profile} session={session} /> },
+    { page: 'doctors', element: <ManageDoctors profile={profile} /> },
   ];
 
   return (
@@ -142,6 +142,9 @@ export default function App() {
           <NoAccessToast />
           <Routes>
             <Route path="/" element={<Navigate to={landingPath(profile)} replace />} />
+            {Object.entries(ROUTE_ALIASES).map(([from, to]) => (
+              <Route key={from} path={from} element={<Navigate to={to} replace />} />
+            ))}
             {guardedRoutes.map(({ page, element }) => (
               <Route
                 key={page}

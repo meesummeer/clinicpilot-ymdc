@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { supabase, fetchAllRowsByIds } from '../lib/supabaseClient';
 import { karachiTodayISO } from '../lib/dateUtils';
-import { getYmdcNet } from '../lib/ymdcNet';
+import { getYmdcNet, computeEntityBreakdown } from '../lib/ymdcNet';
 import { buildVisibleRows, summarizeRows } from '../lib/billingMethodFilter';
 import { paymentMethodLabel } from '../constants/paymentMethods';
 import FinancialReportView from '../components/FinancialReportView';
 import YmdcTrendChart from '../components/YmdcTrendChart';
-import TopDoctorsList from '../components/TopDoctorsList';
+import RevenueLists from '../components/RevenueLists';
 import DatePresets from '../components/DatePresets';
 import { hubAccess } from '../permissions';
 
@@ -51,14 +51,21 @@ export default function Hub({ profile }) {
   // from getYmdcNet (src/lib/ymdcNet.js) — the same function that feeds the
   // 3-month trend chart — so the header cards and the chart can't disagree.
   const [net, setNet] = useState(null);
+  const [allDoctors, setAllDoctors] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showFinancialReport, setShowFinancialReport] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const result = await getYmdcNet(dateFrom, dateTo);
+    const [result, allDoctorsResult] = await Promise.all([
+      getYmdcNet(dateFrom, dateTo),
+      // Every doctors row (inactive too) for the Doctors / Services lists.
+      supabase.from('doctors').select('*').order('name'),
+    ]);
+    if (allDoctorsResult.error) console.error(allDoctorsResult.error.message);
     setNet(result);
+    setAllDoctors(allDoctorsResult.data || []);
 
     // Payment-method totals need per-payment granularity — a split invoice
     // must contribute to each of its real methods' totals — which
@@ -150,6 +157,10 @@ export default function Hub({ profile }) {
   const expenses = net?.expenses ?? [];
   const doctorFinancials = net?.doctorFinancials ?? [];
   const serviceCategoryFinancials = net?.serviceCategoryFinancials ?? [];
+  const entries = useMemo(
+    () => (net ? computeEntityBreakdown({ doctors: allDoctors, rows: net.rows, costs: net.costs }) : []),
+    [net, allDoctors]
+  );
   const totalRevenue = net?.totalRevenue ?? 0;
   const ymdcRevenue = net?.ymdcShare ?? 0;
   const totalExpenses = net?.totalExpenses ?? 0;
@@ -266,12 +277,7 @@ export default function Hub({ profile }) {
         )
       )}
 
-      <TopDoctorsList
-        doctorFinancials={doctorFinancials}
-        serviceCategoryFinancials={serviceCategoryFinancials}
-        loading={loading}
-        showFinancials={showFinancials}
-      />
+      <RevenueLists entries={entries} totalRevenue={totalRevenue} loading={loading} showFinancials={showFinancials} />
 
       {showFinancials && (
       <div className="card">

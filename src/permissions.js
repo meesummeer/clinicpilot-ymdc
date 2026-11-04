@@ -30,9 +30,18 @@ export const PAGES = {
   patients: { path: '/patients', roles: ['admin', 'manager', 'csr', 'doctor'] },
   revenue: { path: '/revenue', roles: ['doctor'] },
   expenses: { path: '/expenses', roles: ['admin', 'manager', 'ceo'], requiresFlag: 'has_expenses_access' },
+  // Settings group (admin only): DRC, Manage Doctors, Backup. The old URLs
+  // /doctors and /settings still work as aliases (see ROUTE_ALIASES).
   doctorCalculator: { path: '/doctor-calculator', roles: ['admin'] },
-  settings: { path: '/settings', roles: ['admin'] },
-  doctors: { path: '/doctors', roles: ['admin'] },
+  doctors: { path: '/manage-doctors', roles: ['admin'] },
+  backup: { path: '/backup', roles: ['admin'] },
+};
+
+// Old URLs that keep working: they redirect to the page's current path, and
+// the normal access check then applies to the target.
+export const ROUTE_ALIASES = {
+  '/doctors': '/manage-doctors',
+  '/settings': '/backup',
 };
 
 export const PAGE_TITLES = {
@@ -41,12 +50,12 @@ export const PAGE_TITLES = {
   '/calendar': 'Doctor Calendar',
   '/billing': 'Billing',
   '/patients': 'Patients',
-  '/doctors': 'Manage Doctors',
+  '/manage-doctors': 'Manage Doctors',
+  '/backup': 'Backup',
   '/hub': 'Hub',
   '/revenue': 'Revenue',
   '/expenses': 'Expenses',
-  '/settings': 'Settings',
-  '/doctor-calculator': 'Doctor Calculator',
+  '/doctor-calculator': 'DRC',
 };
 
 export function canAccess(profile, pageKey) {
@@ -88,20 +97,14 @@ export const SIDEBAR = [
       { page: 'patients', label: 'Patients' },
     ],
   },
-  {
-    group: 'expenses',
-    label: 'Expenses',
-    children: [
-      { page: 'expenses', label: 'Expenses' },
-      { page: 'doctorCalculator', label: 'Doctor Calculator' },
-    ],
-  },
+  { page: 'expenses', label: 'Expenses' },
   {
     group: 'settings',
     label: 'Settings',
     children: [
-      { page: 'settings', label: 'Settings' },
+      { page: 'doctorCalculator', label: 'DRC' },
       { page: 'doctors', label: 'Manage Doctors' },
+      { page: 'backup', label: 'Backup' },
     ],
   },
 ];

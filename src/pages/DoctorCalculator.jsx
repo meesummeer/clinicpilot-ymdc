@@ -7,7 +7,7 @@ function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
 }
 
-// The Doctor Revenue Calculator, moved off the Hub. Same numbers, same
+// The DRC page (the revenue calculator), moved off the Hub. Same numbers, same
 // layout, same cost handling (doctor_costs); only the page it lives on and
 // its own From/To filter are new. Admin only (the route is admin-only and
 // adding/deleting costs is guarded here too).
@@ -90,7 +90,7 @@ export default function DoctorCalculator({ profile }) {
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Doctor Revenue Calculator</h3>
+        <h3 style={{ marginTop: 0 }}>DRC</h3>
         {loading ? (
           <p>Loading…</p>
         ) : doctorFinancials.length === 0 ? (
