@@ -12,6 +12,7 @@ import ManageDoctors from './pages/ManageDoctors';
 import Hub from './pages/Hub';
 import Expenses from './pages/Expenses';
 import Settings from './pages/Settings';
+import DoctorCalculator from './pages/DoctorCalculator';
 import DoctorOwnCalendar from './pages/DoctorOwnCalendar';
 import DoctorRevenue from './pages/DoctorRevenue';
 import DoctorPatients from './pages/DoctorPatients';
@@ -28,6 +29,7 @@ const PAGE_TITLES = {
   '/revenue': 'Revenue',
   '/expenses': 'Expenses',
   '/settings': 'Settings',
+  '/doctor-calculator': 'Doctor Calculator',
 };
 
 function PageHeader() {
@@ -100,6 +102,11 @@ export default function App() {
             {hasExpensesAccess && (
               <NavLink to="/expenses" className={linkClass} onClick={closeNav}>
                 <span className="icon-dot" /> Expenses
+              </NavLink>
+            )}
+            {isAdmin && (
+              <NavLink to="/doctor-calculator" className={linkClass} onClick={closeNav}>
+                <span className="icon-dot" /> Doctor Calculator
               </NavLink>
             )}
             {isAdmin && (
@@ -183,6 +190,7 @@ export default function App() {
                 <Route path="/billing" element={<Billing profile={profile} userEmail={session.user.email} />} />
                 <Route path="/patients" element={<Patients userEmail={session.user.email} />} />
                 {hasExpensesAccess && <Route path="/expenses" element={<Expenses profile={profile} />} />}
+                {isAdmin && <Route path="/doctor-calculator" element={<DoctorCalculator profile={profile} />} />}
                 {isAdmin && <Route path="/doctors" element={<ManageDoctors />} />}
                 {isAdmin && <Route path="/settings" element={<Settings profile={profile} session={session} />} />}
                 {(isAdmin || hasHubAccess) && <Route path="/hub" element={<Hub profile={profile} />} />}

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
-import { supabase, fetchAllRows, fetchAllRowsByIds } from '../lib/supabaseClient';
-import { formatDateDMY } from '../lib/formatters';
-import { splitRevenue } from '../lib/revenueSplit';
+import { supabase, fetchAllRowsByIds } from '../lib/supabaseClient';
+import { karachiTodayISO } from '../lib/dateUtils';
+import { getYmdcNet } from '../lib/ymdcNet';
 import { buildVisibleRows, summarizeRows } from '../lib/billingMethodFilter';
 import { paymentMethodLabel } from '../constants/paymentMethods';
 import FinancialReportView from '../components/FinancialReportView';
+import YmdcTrendChart from '../components/YmdcTrendChart';
+import TopDoctorsList from '../components/TopDoctorsList';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
@@ -30,65 +32,26 @@ const ARCHIVE_EXPENSE_CATEGORIES = [
 ];
 
 export default function Hub({ profile }) {
-  const isAdmin = profile?.role === 'admin';
-
-  const today = new Date().toISOString().slice(0, 10);
+  // Clinic (Karachi) calendar, so "today" and "this month" match the
+  // trend chart's month boundaries.
+  const today = karachiTodayISO();
   const firstOfMonth = today.slice(0, 8) + '01';
 
   const [dateFrom, setDateFrom] = useState(firstOfMonth);
   const [dateTo, setDateTo] = useState(today);
 
-  const [doctors, setDoctors] = useState([]);
-  const [rows, setRows] = useState([]);
+  // Everything the cards, Top Doctors and the financial report show comes
+  // from getYmdcNet (src/lib/ymdcNet.js) — the same function that feeds the
+  // 3-month trend chart — so the header cards and the chart can't disagree.
+  const [net, setNet] = useState(null);
   const [payments, setPayments] = useState([]);
-  const [costs, setCosts] = useState([]);
-  const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  const [openCostFormFor, setOpenCostFormFor] = useState(null);
-  const [costDraft, setCostDraft] = useState({ description: '', amount: '', cost_date: today });
-  const [savingCost, setSavingCost] = useState(false);
   const [showFinancialReport, setShowFinancialReport] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [
-      { data: docs, error: docErr },
-      { data: analyticsRows, error: rowErr },
-      { data: costRows, error: costErr },
-      { data: expenseRows, error: expensesError },
-    ] = await Promise.all([
-      supabase.from('doctors').select('*').eq('active', true).order('name'),
-      // billing_analytics already has role-based access built in (admin,
-      // ceo, and doctor-scoped) and carries everything needed for revenue
-      // math — amount, payment_method, doctor_id, etc — with no patient
-      // PII. Querying billing/billing_payments directly here (even via an
-      // embedded join) hits billing_select_staff, which blocks ceo and
-      // silently zeroes out these totals for that role.
-      //
-      // Paged with fetchAllRows: a busy month can have 1000+ matching
-      // rows, past PostgREST's default response cap — past that cap the
-      // plain query just silently truncates, with no error, which is what
-      // was previously undercounting Total Revenue/YMDC/Doctor-wise.
-      fetchAllRows(() =>
-        supabase
-          .from('billing_analytics')
-          .select('*')
-          .gte('billing_date', dateFrom)
-          .lte('billing_date', dateTo)
-          .order('id', { ascending: true })
-      ),
-      supabase.from('doctor_costs').select('*').gte('cost_date', dateFrom).lte('cost_date', dateTo),
-      supabase.from('expenses').select('*').gte('expense_date', dateFrom).lte('expense_date', dateTo),
-    ]);
-    if (docErr) console.error(docErr.message);
-    if (rowErr) console.error(rowErr.message);
-    if (costErr) console.error(costErr.message);
-    if (expensesError) console.error(expensesError.message);
-    setDoctors(docs || []);
-    setRows(analyticsRows || []);
-    setCosts(costRows || []);
-    setExpenses(expenseRows || []);
+    const result = await getYmdcNet(dateFrom, dateTo);
+    setNet(result);
 
     // Payment-method totals need per-payment granularity — a split invoice
     // must contribute to each of its real methods' totals — which
@@ -99,7 +62,7 @@ export default function Hub({ profile }) {
     // blocks ceo, while billing_payments queried directly is governed by
     // its own policy. Chunked with fetchAllRowsByIds — a full month's
     // worth of billing IDs is long enough to 400 a single .in() request.
-    const billingIds = (analyticsRows || []).map((r) => r.id);
+    const billingIds = result.rows.map((r) => r.id);
     if (billingIds.length > 0) {
       const { data: paymentRows, error: paymentsError } = await fetchAllRowsByIds(
         () => supabase.from('billing_payments').select('*').order('id', { ascending: true }),
@@ -172,71 +135,14 @@ export default function Hub({ profile }) {
     return value == null ? '—' : formatPKR(value);
   }
 
-  // billing_analytics.amount is each billing row's full invoice total
-  // (already summed across payment methods when the entry was saved), so
-  // revenue per row is just the row's own amount — no separate
-  // billing_payments query needed.
-  function revenueFor(row) {
-    return Number(row.amount) || 0;
-  }
-
-  const totalRevenue = useMemo(() => rows.reduce((s, r) => s + revenueFor(r), 0), [rows]);
-
-  const doctorFinancials = useMemo(() => {
-    return doctors
-      .filter((d) => !d.is_service_category)
-      .map((d) => {
-        const doctorRows = rows.filter((r) => r.doctor_id === d.id);
-        const costsList = costs
-          .filter((c) => c.doctor_id === d.id)
-          .sort((a, b) => (a.cost_date < b.cost_date ? 1 : -1));
-        const totalCosts = costsList.reduce((s, c) => s + Number(c.amount), 0);
-        const split = splitRevenue(doctorRows, d.split_percentage, totalCosts);
-
-        return {
-          doctor: d,
-          transactionCount: doctorRows.length,
-          gross: split.gross,
-          costsList,
-          totalCosts,
-          net: split.net,
-          doctorShare: split.entityShare,
-          ymdcShare: split.centreShare,
-          effectiveSplitPct: split.effectiveSplitPct,
-        };
-      });
-  }, [doctors, rows, costs]);
-
-  // Service-category "doctors" (X-Ray, Ultrasound, etc.) split the exact
-  // same way as real doctors — using their own doctors.split_percentage,
-  // never a hardcoded 100%-centre assumption. A category intentionally at
-  // 100% (Vitals Checkup, Bandage Dressing, ...) still nets out to its
-  // full gross as centre share here, just because its split_percentage
-  // really is 100, not because this code forces it. Costs aren't tracked
-  // per service category in the UI, so this passes 0.
-  const serviceCategoryFinancials = useMemo(() => {
-    return doctors
-      .filter((d) => d.is_service_category)
-      .map((d) => {
-        const doctorRows = rows.filter((r) => r.doctor_id === d.id);
-        const split = splitRevenue(doctorRows, d.split_percentage, 0);
-        return { doctor: d, gross: split.gross, ymdcShare: split.centreShare };
-      });
-  }, [doctors, rows]);
-
-  const serviceCategoryRevenue = useMemo(
-    () => serviceCategoryFinancials.reduce((s, f) => s + f.ymdcShare, 0),
-    [serviceCategoryFinancials]
-  );
-
-  const ymdcRevenue = useMemo(
-    () => doctorFinancials.reduce((s, f) => s + f.ymdcShare, 0) + serviceCategoryRevenue,
-    [doctorFinancials, serviceCategoryRevenue]
-  );
-
-  const totalExpenses = useMemo(() => expenses.reduce((s, e) => s + Number(e.amount), 0), [expenses]);
-
-  const profitLoss = ymdcRevenue - totalExpenses;
+  const rows = net?.rows ?? [];
+  const expenses = net?.expenses ?? [];
+  const doctorFinancials = net?.doctorFinancials ?? [];
+  const serviceCategoryFinancials = net?.serviceCategoryFinancials ?? [];
+  const totalRevenue = net?.totalRevenue ?? 0;
+  const ymdcRevenue = net?.ymdcShare ?? 0;
+  const totalExpenses = net?.totalExpenses ?? 0;
+  const profitLoss = net?.net ?? 0;
 
   // Same method breakdown Billing's tiles use (shared billingMethodFilter
   // helpers), so the two pages can't drift apart: each invoice is split across
@@ -251,19 +157,6 @@ export default function Hub({ profile }) {
     });
     return summarizeRows(buildVisibleRows(rows, byBillingId, 'all'));
   }, [rows, payments]);
-
-  const doctorWise = useMemo(() => {
-    return doctors
-      .map((d) => {
-        const doctorRows = rows.filter((r) => r.doctor_id === d.id);
-        return {
-          doctor: d,
-          count: doctorRows.length,
-          total: doctorRows.reduce((s, r) => s + revenueFor(r), 0),
-        };
-      })
-      .sort((a, b) => b.total - a.total);
-  }, [doctors, rows]);
 
   // Financial report Income table: one row per real doctor (same
   // gross/cost/YMDC-share numbers as the Doctor Revenue Calculator below),
@@ -297,40 +190,6 @@ export default function Hub({ profile }) {
       amount,
     }));
   }, [expenses]);
-
-  function openAddCost(doctorId) {
-    setCostDraft({ description: '', amount: '', cost_date: today });
-    setOpenCostFormFor(doctorId);
-  }
-
-  async function handleAddCost(e, doctorId) {
-    e.preventDefault();
-    setSavingCost(true);
-    const { error } = await supabase.from('doctor_costs').insert({
-      doctor_id: doctorId,
-      description: costDraft.description || null,
-      amount: parseFloat(costDraft.amount),
-      cost_date: costDraft.cost_date,
-      created_by: profile.id,
-    });
-    setSavingCost(false);
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    setOpenCostFormFor(null);
-    loadData();
-  }
-
-  async function handleDeleteCost(cost) {
-    if (!window.confirm(`Delete this cost${cost.description ? ` (${cost.description})` : ''} of ${formatPKR(cost.amount)}? This can't be undone.`)) return;
-    const { error } = await supabase.from('doctor_costs').delete().eq('id', cost.id);
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    loadData();
-  }
 
   return (
     <div>
@@ -373,25 +232,13 @@ export default function Hub({ profile }) {
         </div>
       </div>
 
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Doctor-wise Revenue</h3>
-        {doctorWise.length === 0 ? (
-          <div className="empty-state">No doctors set up.</div>
-        ) : (
-          <table className="data-table">
-            <thead><tr><th>Doctor</th><th>Transactions</th><th>Total</th></tr></thead>
-            <tbody>
-              {doctorWise.map(({ doctor, count, total }) => (
-                <tr key={doctor.id}>
-                  <td><span className="doctor-dot" style={{ background: doctor.color_hex }} />{doctor.name}</td>
-                  <td>{count}</td>
-                  <td>{formatPKR(total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <YmdcTrendChart />
+
+      <TopDoctorsList
+        doctorFinancials={doctorFinancials}
+        serviceCategoryFinancials={serviceCategoryFinancials}
+        loading={loading}
+      />
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Cash vs Bank Account</h3>
@@ -407,120 +254,6 @@ export default function Hub({ profile }) {
             )}
           </tbody>
         </table>
-      </div>
-
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Doctor Revenue Calculator</h3>
-        {loading ? (
-          <p>Loading…</p>
-        ) : doctorFinancials.length === 0 ? (
-          <div className="empty-state">No doctors set up.</div>
-        ) : (
-          doctorFinancials.map((f) => (
-            <div key={f.doctor.id} className="card hub-doctor-block" style={{ borderTopColor: f.doctor.color_hex }}>
-              <div className="hub-doctor-block-header">
-                <h4>
-                  <span className="doctor-dot" style={{ background: f.doctor.color_hex }} />
-                  {f.doctor.name}
-                </h4>
-                <div className="hub-doctor-gross">
-                  Gross Revenue: <strong>{formatPKR(f.gross)}</strong> ({f.transactionCount} transaction{f.transactionCount !== 1 ? 's' : ''})
-                </div>
-              </div>
-
-              <div className="hub-costs-heading">
-                <strong>Costs</strong>
-                {isAdmin && (
-                  <button className="btn-secondary" onClick={() => openAddCost(f.doctor.id)}>+ Add Cost</button>
-                )}
-              </div>
-
-              {isAdmin && openCostFormFor === f.doctor.id && (
-                <form className="hub-cost-form" onSubmit={(e) => handleAddCost(e, f.doctor.id)}>
-                  <div className="filters-row" style={{ marginBottom: 0 }}>
-                    <div className="filter-field">
-                      <label>Description</label>
-                      <input
-                        value={costDraft.description}
-                        onChange={(e) => setCostDraft((d) => ({ ...d, description: e.target.value }))}
-                      />
-                    </div>
-                    <div className="filter-field">
-                      <label>Amount (PKR)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        required
-                        value={costDraft.amount}
-                        onChange={(e) => setCostDraft((d) => ({ ...d, amount: e.target.value }))}
-                      />
-                    </div>
-                    <div className="filter-field">
-                      <label>Date</label>
-                      <input
-                        type="date"
-                        required
-                        value={costDraft.cost_date}
-                        onChange={(e) => setCostDraft((d) => ({ ...d, cost_date: e.target.value }))}
-                      />
-                    </div>
-                  </div>
-                  <button type="submit" className="btn-primary" disabled={savingCost} style={{ marginRight: 8, marginTop: 12 }}>
-                    {savingCost ? 'Saving…' : 'Save Cost'}
-                  </button>
-                  <button type="button" className="btn-secondary" style={{ marginTop: 12 }} onClick={() => setOpenCostFormFor(null)}>
-                    Cancel
-                  </button>
-                </form>
-              )}
-
-              {f.costsList.length === 0 ? (
-                <div className="empty-state" style={{ padding: 16 }}>No costs recorded for this range.</div>
-              ) : (
-                <table className="data-table" style={{ marginBottom: 8 }}>
-                  <thead>
-                    <tr><th>Date</th><th>Description</th><th>Amount</th>{isAdmin && <th></th>}</tr>
-                  </thead>
-                  <tbody>
-                    {f.costsList.map((c) => (
-                      <tr key={c.id}>
-                        <td>{formatDateDMY(c.cost_date)}</td>
-                        <td>{c.description || '—'}</td>
-                        <td>{formatPKR(c.amount)}</td>
-                        {isAdmin && (
-                          <td><button className="btn-danger-outline" onClick={() => handleDeleteCost(c)}>Delete</button></td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-
-              <div className="hub-calc-summary">
-                <div>
-                  <span className="label">Total Costs</span>
-                  <span className="value">{formatPKR(f.totalCosts)}</span>
-                </div>
-                <div>
-                  <span className="label">Net Revenue</span>
-                  <span className="value">{formatPKR(f.net)}</span>
-                </div>
-              </div>
-
-              <div className="hub-split-blocks">
-                <div className="hub-split-block">
-                  <div className="label">Doctor's Share ({(100 - f.effectiveSplitPct).toFixed(0)}%)</div>
-                  <div className="value">{formatPKR(f.doctorShare)}</div>
-                </div>
-                <div className="hub-split-block hub-split-block-gold">
-                  <div className="label">YMDC's Share ({f.effectiveSplitPct.toFixed(0)}%)</div>
-                  <div className="value">{formatPKR(f.ymdcShare)}</div>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
       </div>
 
       <div className="card hub-archive-section">
