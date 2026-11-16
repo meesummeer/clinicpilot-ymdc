@@ -101,7 +101,7 @@ export default function App() {
     { page: 'today', element: <Today profile={profile} /> },
     { page: 'calendar', element: isDoctor ? <DoctorOwnCalendar profile={profile} /> : <DoctorCalendar /> },
     { page: 'appointments', element: <Appointments profile={profile} /> },
-    { page: 'billing', element: <Billing profile={profile} userEmail={session.user.email} /> },
+    { page: 'billing', element: <Billing profile={profile} /> },
     { page: 'patients', element: isDoctor ? <DoctorPatients profile={profile} /> : <Patients userEmail={session.user.email} /> },
     { page: 'revenue', element: <DoctorRevenue profile={profile} /> },
     { page: 'expenses', element: <Expenses profile={profile} /> },

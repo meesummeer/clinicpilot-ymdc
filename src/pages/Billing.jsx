@@ -7,6 +7,8 @@ import BillingReportView from '../components/BillingReportView';
 import { formatDateDMY } from '../lib/formatters';
 import { METHOD_FILTER_OPTIONS, buildVisibleRows, summarizeRows } from '../lib/billingMethodFilter';
 import { paymentMethodLabel } from '../constants/paymentMethods';
+import { can } from '../permissions';
+import { isPermissionError } from '../lib/permissionErrors';
 
 function formatPKR(n) {
   return 'PKR ' + Number(n || 0).toLocaleString('en-PK');
@@ -23,7 +25,7 @@ function PartialNote({ row }) {
   );
 }
 
-export default function Billing({ profile, userEmail }) {
+export default function Billing({ profile }) {
   const [doctors, setDoctors] = useState([]);
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,6 +37,7 @@ export default function Billing({ profile, userEmail }) {
   const [allEntriesDoctorFilter, setAllEntriesDoctorFilter] = useState('all');
   const [showBillingReport, setShowBillingReport] = useState(false);
   const [payments, setPayments] = useState([]);
+  const [toast, setToast] = useState(null); // { kind: 'success' | 'error', message }
 
   const today = new Date().toISOString().slice(0, 10);
   const firstOfMonth = today.slice(0, 8) + '01';
@@ -103,11 +106,19 @@ export default function Billing({ profile, userEmail }) {
     loadEntries();
   }, [loadEntries]);
 
-  const canEdit = profile?.role === 'admin' || profile?.role === 'csr';
-  const canEditEntry = profile?.role === 'admin';
-  const canDelete = userEmail === 'meesummir@icloud.com';
+  // Who can do what comes from the central permissions config.
+  const canCreate = can(profile, 'billing.create');
+  const canEditEntry = can(profile, 'billing.edit');
+  const canDelete = can(profile, 'billing.delete');
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = setTimeout(() => setToast(null), 4500);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   function handleEditEntry(entry) {
+    if (!canEditEntry) return;
     setEditingEntry(entry);
     setShowForm(true);
   }
@@ -116,7 +127,7 @@ export default function Billing({ profile, userEmail }) {
     if (!window.confirm(`Delete this billing entry for ${entry.patient_name} (${entry.invoice_ref || 'no ref'})? This can't be undone.`)) return;
     const { error } = await supabase.from('billing').delete().eq('id', entry.id);
     if (error) {
-      alert(error.message);
+      setToast({ kind: 'error', message: isPermissionError(error) ? "You don't have permission to delete this invoice" : error.message });
       return;
     }
     loadEntries();
@@ -209,7 +220,7 @@ export default function Billing({ profile, userEmail }) {
               ))}
             </select>
           </div>
-          {canEdit && (
+          {canCreate && (
             <button
               className="btn-primary filters-row-end"
               onClick={() => {
@@ -228,7 +239,7 @@ export default function Billing({ profile, userEmail }) {
         </div>
       </div>
 
-      {showForm && canEdit && (!editingEntry || canEditEntry) && (
+      {showForm && (editingEntry ? canEditEntry : canCreate) && (
         <BillingForm
           doctors={doctors}
           profileId={profile.id}
@@ -238,11 +249,13 @@ export default function Billing({ profile, userEmail }) {
             setEditingEntry(null);
           }}
           onSaved={() => {
+            if (editingEntry) setToast({ kind: 'success', message: 'Invoice updated' });
             setShowForm(false);
             setEditingEntry(null);
             loadEntries();
           }}
           onSavedAndPrint={(savedEntry) => {
+            if (editingEntry) setToast({ kind: 'success', message: 'Invoice updated' });
             setShowForm(false);
             setEditingEntry(null);
             loadEntries();
@@ -388,6 +401,28 @@ export default function Billing({ profile, userEmail }) {
           </table>
         )}
       </div>
+
+      {toast && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            top: 18,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 2100,
+            background: toast.kind === 'error' ? 'var(--red)' : 'var(--navy)',
+            color: 'white',
+            padding: '10px 18px',
+            borderRadius: 10,
+            fontSize: 14,
+            fontWeight: 600,
+            boxShadow: 'var(--shadow-lg)',
+          }}
+        >
+          {toast.message}
+        </div>
+      )}
 
       {invoiceEntry && (
         <InvoiceView

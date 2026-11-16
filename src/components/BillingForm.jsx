@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { isPermissionError } from '../lib/permissionErrors';
 import { SELECTABLE_PAYMENT_METHODS, paymentMethodLabel } from '../constants/paymentMethods';
 
 // Doctor name -> service label used to auto-fill "Consultation - {label}".
@@ -38,6 +39,8 @@ function formatPKR(n) {
 function emptyPayment() {
   return { payment_method: 'cash', amount: '' };
 }
+
+const PERMISSION_MESSAGE = "You don't have permission to edit this invoice";
 
 export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCancel, profileId, entry }) {
   const isEditing = !!entry;
@@ -252,13 +255,35 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
     const { data, error: saveError } = await query.select('*, doctors(name, color_hex)').single();
     if (saveError) {
       setSaving(false);
-      setError(saveError.message);
+      setError(isEditing && isPermissionError(saveError) ? PERMISSION_MESSAGE : saveError.message);
       return;
     }
 
+    let oldPayments = [];
     if (isEditing) {
+      // Remember the current payment rows so a failed replacement can put them back.
+      const { data: existing } = await supabase.from('billing_payments').select('billing_id, payment_method, amount').eq('billing_id', entry.id);
+      oldPayments = existing || [];
+      // The payments are replaced as a whole. If the old rows can't be removed
+      // (permission, or a row-level-security rule that silently skips them),
+      // stop here: inserting the new rows on top would double-count the invoice.
       const { error: deleteError } = await supabase.from('billing_payments').delete().eq('billing_id', entry.id);
-      if (deleteError) console.error(deleteError.message);
+      const { count: remaining, error: remainingError } = deleteError
+        ? { count: null, error: null }
+        : await supabase.from('billing_payments').select('id', { count: 'exact', head: true }).eq('billing_id', entry.id);
+      if (deleteError || remainingError || remaining > 0) {
+        // Best effort: put the invoice row back as it was so its amount still
+        // matches its (unchanged) payments.
+        const original = {};
+        Object.keys(payload).forEach((k) => {
+          original[k] = entry[k] ?? null;
+        });
+        await supabase.from('billing').update(original).eq('id', entry.id);
+        setSaving(false);
+        const blocked = !deleteError && !remainingError ? true : isPermissionError(deleteError || remainingError);
+        setError(blocked ? PERMISSION_MESSAGE : `Could not update payment details: ${(deleteError || remainingError).message}. Nothing was changed.`);
+        return;
+      }
     }
 
     const { error: paymentsError } = await supabase
@@ -274,9 +299,21 @@ export default function BillingForm({ doctors, onSaved, onSavedAndPrint, onCance
       // place and the error is surfaced instead of deleting existing data.
       if (!isEditing) {
         await supabase.from('billing').delete().eq('id', data.id);
+      } else {
+        // Put the previous payments and invoice values back (best effort).
+        if (oldPayments.length > 0) await supabase.from('billing_payments').insert(oldPayments);
+        const original = {};
+        Object.keys(payload).forEach((k) => {
+          original[k] = entry[k] ?? null;
+        });
+        await supabase.from('billing').update(original).eq('id', entry.id);
       }
       setSaving(false);
-      setError(`Could not save payment details: ${paymentsError.message}. Please try again.`);
+      setError(
+        isEditing && isPermissionError(paymentsError)
+          ? PERMISSION_MESSAGE
+          : `Could not save payment details: ${paymentsError.message}. Please try again.`
+      );
       return;
     }
 

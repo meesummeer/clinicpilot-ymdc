@@ -37,6 +37,25 @@ export const PAGES = {
   backup: { path: '/backup', roles: ['admin'] },
 };
 
+// Named actions inside a page (as opposed to who may open the page). Read with
+// can(profile, 'billing.edit') — components never compare role strings
+// themselves. Roles are effectiveRole() values: Rashid is 'manager'.
+//   billing.create  add a new billing entry
+//   billing.edit    edit an existing invoice, including its payments
+//   billing.delete  delete an invoice (admin only; the database is stricter
+//                   still — RLS lets only the one admin account delete)
+export const ACTIONS = {
+  'billing.create': ['admin', 'manager', 'csr'],
+  'billing.edit': ['admin', 'manager', 'csr'],
+  'billing.delete': ['admin'],
+};
+
+export function can(profile, action) {
+  const roles = ACTIONS[action];
+  if (!roles || !profile) return false;
+  return roles.includes(effectiveRole(profile));
+}
+
 // Old URLs that keep working: they redirect to the page's current path, and
 // the normal access check then applies to the target.
 export const ROUTE_ALIASES = {
